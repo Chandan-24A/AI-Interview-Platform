@@ -4,8 +4,12 @@ import dotenv from "dotenv"
 dotenv.config();
 
 async function connectDB(){
-    
+    try{
+        await mongoose.connect(process.env.MOGODB_URI);
+        console.log("Connected to MongoDB database");
+    }catch(err){
+        console.error("Failed to connect to DB:", err.message);
+        process.exit(1);
+    }
 }
-
-
 export default connectDB;
