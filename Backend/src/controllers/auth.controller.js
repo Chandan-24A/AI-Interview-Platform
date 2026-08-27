@@ -2,7 +2,7 @@ import userModel from "../models/user.model.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import {sendRegistrationEmail, sendLoginEmail } from "../services/email.service.js";
-
+import blackListModel from "../models/blacklist.model.js";
 
 /*
  Registration Controller
@@ -110,6 +110,86 @@ async function loginController(req,res){
     }
 }
 
+async function getMe(req,res){
+    const token = req.cookies.token || req.headers.authorization?.split(" ")[ 1 ];
 
+    if(!token){
+        return res.status(409).json({
+            message:"Invalid Token , Can't access user details"
+        })
+    }
 
-export {registerController,loginController};
+    const isValid = await blackListModel.findOne({token});
+
+    if(isValid){
+        return res.status(409).json({
+            message:"Invalid Token , Can't access user details"
+        })
+    }
+
+    try{
+
+        const decoded = jwt.verify(token,process.env.JWT_SECRET);
+
+        const user = await userModel.findOne({_id:decoded.userId});
+
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found"
+            });
+        }
+
+        return res.status(200).json({
+            message:"User details fetched successfully",
+            user:{
+                id:user._id,
+                email:user.email,
+                username:user.username,
+            }
+        })
+
+    }catch(err){
+        console.log(err);
+        res.status(500).json({
+
+            message:"Server Unavailable"
+        })
+    }
+
+}
+
+async function logOutController(req,res){
+    const token = req.cookies.token || req.headers.authorization?.split(" ")[ 1 ];
+
+    if(!token){
+        return res.status(409).json({
+            message:"Invalid Token , Can't access user details"
+        })
+    }
+
+    const isValid = await blackListModel.findOne({token});
+
+    if(isValid){
+        return res.status(409).json({
+            message:"Invalid Token , Can't access user details"
+        })
+    }
+
+    try{
+        jwt.verify(token,process.env.JWT_SECRET);
+
+        await blackListModel.create({token:token});
+
+        res.clearCookie("token");
+
+        res.status(200).json({
+            message:"User Logged out Successfully"
+        })
+    }catch(err){
+        res.status(401).json({
+            message:"Invalid Token"
+        })
+    }
+}
+
+export {registerController,loginController,getMe,logOutController};
