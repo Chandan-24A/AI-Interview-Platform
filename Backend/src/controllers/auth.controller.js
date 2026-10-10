@@ -37,7 +37,7 @@ async function registerController(req,res){
             {expiresIn:"7d"},
         )
 
-        res.cookie("token",token,{httpOnly:true,secure: process.env.NODE_ENV === "production"});
+        res.cookie("token",token,{httpOnly:true,secure: process.env.NODE_ENV === "production",sameSite:"strict",maxAge:7*24*60*60*1000});
 
         res.status(201).json({
             message:"user created successfully",
@@ -90,7 +90,7 @@ async function loginController(req,res){
 
         const token = await jwt.sign({userId:user._id},process.env.JWT_SECRET,{expiresIn:"7d"});
 
-        res.cookie("token",token,{httpOnly:true,secure: process.env.NODE_ENV === "production"});
+        res.cookie("token",token,{httpOnly:true,secure: process.env.NODE_ENV === "production",sameSite:"strict",maxAge:7*24*60*60*1000});
 
         res.status(200).json({
             message:"User logged in sucessfully",
@@ -111,27 +111,9 @@ async function loginController(req,res){
 }
 
 async function getMe(req,res){
-    const token = req.cookies.token || req.headers.authorization?.split(" ")[ 1 ];
-
-    if(!token){
-        return res.status(409).json({
-            message:"Invalid Token , Can't access user details"
-        })
-    }
-
-    const isValid = await blackListModel.findOne({token});
-
-    if(isValid){
-        return res.status(409).json({
-            message:"Invalid Token , Can't access user details"
-        })
-    }
-
     try{
 
-        const decoded = jwt.verify(token,process.env.JWT_SECRET);
-
-        const user = await userModel.findOne({_id:decoded.userId});
+        const user = await userModel.findById(req.userId).select("-password");
 
         if (!user) {
             return res.status(404).json({
