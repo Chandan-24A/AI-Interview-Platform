@@ -13,6 +13,6 @@ router.post("/login",loginController);
 
 router.get("/details",authMiddleware,getMe);
 
-router.post("/logout",logOutController)
+router.get("/logout",logOutController)
 
 export default router;

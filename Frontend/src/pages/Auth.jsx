@@ -2,17 +2,21 @@ import { RiRobot2Fill } from "react-icons/ri";
 import { RiSparklingLine } from "react-icons/ri";
 import { motion } from "motion/react"
 import { useNavigate } from "react-router-dom";
-const Auth = () => {
+const Auth = ({isModel = false}) => {
   const navigate = useNavigate()
 
   return (
-    <div className="w-full min-h-screen flex bg-[#f3f3f3] items-center justify-center  px-6 py-20">
+    <div className={`
+    w-full 
+    ${ isModel ? "py-4" : "min-h-screen flex bg-[#f3f3f3] items-center justify-center  px-6 py-20"}`}>
         <motion.div 
         initial={{opacity:0, y:-40}}
         animate={{opacity:1 , y:0}}
         transition={{duration:1.03}}
 
-        className="w-full max-w-md p-8 bg-white rounded-3xl border border-gray-200 shadow-2xl">
+        className={`
+            w-full 
+            ${isModel ? "max-w-md p-8 rounded-3xl border border-gray-400" : "max-w-md p-8 bg-white rounded-3xl border border-gray-200 shadow-2xl"}`} >
             <div className="flex items-center justify-center mb-6 gap-3">
                 <div className="bg-black rounded-lg p-2 text-white">
                     <RiRobot2Fill size={18}/>
