@@ -3,6 +3,10 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
+/*
+ multer to accept pdf file from frontend , store and read the file.
+*/
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
