@@ -125,26 +125,33 @@ async function generateQuestions(req,res){
 
         const {role,experience,mode,resumeText,projects,skills} = req.body;
 
-        role = role?.trim();
-        experience = experience?.trim();
-        mode = mode?.trim();
+        const trimmedRole = role?.trim();
+        const trimmedExperience = experience?.trim();
+        const trimmedMode = mode?.trim();
 
-        if(!role || !experience || !mode){
-            return res.status(400).json({message:"Role,Experience and mode are required"})
+        if(!trimmedRole || !trimmedExperience || !trimmedMode){
+            return res.status(400).json({message:"Role, Experience and Mode are required"});
         }
 
         const user = await userModel.findById(req.userId);
+        if(!user){
+            return res.status(404).json({message:"User not found"});
+        }
 
-        const projectsText = Array.isArray(projects) && projects.length ? projects.join(", ") : "None";
+        const projectsText = Array.isArray(projects) && projects.length
+            ? projects.join(", ")
+            : (typeof projects === "string" && projects.trim() ? projects.trim() : "None");
 
-        const skillsText = Array.isArray(skills) && skills.length ? skills.join(", ") : "None";
+        const skillsText = Array.isArray(skills) && skills.length
+            ? skills.join(", ")
+            : (typeof skills === "string" && skills.trim() ? skills.trim() : "None");
 
         const safeResume = resumeText?.trim() || "None";
 
         const userPrompt = `
-        Role:${role},
-        Experience:${experience},
-        InterviewMode:${mode},
+        Role:${trimmedRole},
+        Experience:${trimmedExperience},
+        InterviewMode:${trimmedMode},
         Projects:${projectsText},
         Skills:${skillsText},
         Resume:${safeResume}
@@ -219,9 +226,9 @@ async function generateQuestions(req,res){
 
         const interview = await interviewModel.create({
             userId:user._id,
-            role,
-            experience,
-            mode,
+            role: trimmedRole,
+            experience: trimmedExperience,
+            mode: trimmedMode,
             resumeText:safeResume,
             questions: questionArray.map((q, index) => {
                 const difficulty = generateDifficulty(index, questionArray.length);
@@ -241,9 +248,10 @@ async function generateQuestions(req,res){
         });
 
     }catch(error){
-
-        message: `Failed to create interview.Due to the error: ${error}`
-
+        console.error("Error generating questions:", error);
+        return res.status(500).json({
+            message: `Failed to create interview. Due to the error: ${error.message || error}`
+        });
     }
 }
 
@@ -352,13 +360,13 @@ async function submitAnswer(req,res){
             cleanedResponse = cleanedResponse.substring(jsonStart, jsonEnd + 1);
         }
 
-        const parsed = json.parse(cleanedResponse);
+        const parsed = JSON.parse(cleanedResponse);
 
         question.answer = answer;
         question.confidence = parsed.confidence;
         question.communication = parsed.communication;
         question.correctness = parsed.correctness;
-        question.score = parsed.score;
+        question.score = parsed.finalScore ?? parsed.score ?? 0;
         question.feedback = parsed.feedback;
 
         await interview.save();

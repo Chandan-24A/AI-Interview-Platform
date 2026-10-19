@@ -32,8 +32,8 @@ const Setup = ({onStart}) => {
 
             setRole(result.data.role || "")
             setExperience(result.data.experience || "")
-            setProjects(result.data.projects || "")
-            setSkills(result.data.skills || "")
+            setProjects(Array.isArray(result.data.projects) ? result.data.projects : [])
+            setSkills(Array.isArray(result.data.skills) ? result.data.skills : [])
             setResumeText(result.data.resumeText || "")
             setAnalysisIsDone(true)
 
@@ -41,6 +41,22 @@ const Setup = ({onStart}) => {
         }catch (error){
             console.log(error)
             setAnalyzing(false)
+        }
+    }
+
+    const handleStart = async () =>{
+        setLoading(true)
+
+        try{
+            const result = await axios.post(serverUrl + "/api/interview/generate-questions",{role,experience,mode,resumeText,projects,skills},{withCredentials:true})
+            console.log(result)
+
+            setLoading(false);
+            onStart(result.data)
+
+        }catch(error){
+            console.log(error);
+            setLoading(false)
         }
     }
     
@@ -158,7 +174,8 @@ const Setup = ({onStart}) => {
                         initial={{opacity:0,y:30}}
                         animate={{opacity:1,y:0}}
                          className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-4">
-                            <h3 className="Resume Analysis Result">
+                            <h3 className="text-base font-semibold text-gray-800">
+                                Resume Analysis Result
                             </h3>
                             {projects.length >0 && (
                                 <div>
@@ -189,11 +206,12 @@ const Setup = ({onStart}) => {
                     )}
 
                     <motion.button
-                    disabled={!role || !experience}
+                    onClick={handleStart}
+                    disabled={!role || !experience || loading}
                     whileHover={{scale:1.03}}
                     whileTap={{scale:0.93}}
                      className="w-full disabled:bg-gray-600 bg-green-600 hover:bg-green-700 text-white py-3 rounded-full text-lg font-semibold transition duration-300 shadow-md">
-                        Start Interview
+                        {loading? "Starting...": "Start Interview"}
                     </motion.button>
                 </div>
             </motion.div>
