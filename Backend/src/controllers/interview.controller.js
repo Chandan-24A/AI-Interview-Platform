@@ -431,7 +431,7 @@ async function finishInterview(req,res){
         await interview.save();
 
         return res.status(200).json({
-            finalScore:Number(finalScore.toFixed(1)),
+            finalScore: Number((interview.finalScore || 0).toFixed(1)),
             confidence:Number(avgConfidence.toFixed(1)),
             communication:Number(avgCommunication.toFixed(1)),
             correctness:Number(avgCorrectness.toFixed(1)),
@@ -451,4 +451,65 @@ async function finishInterview(req,res){
     }
 }
 
-export  {analyzeResume,generateQuestions,submitAnswer,finishInterview};
+async function getInterviewHistory(req,res) {
+    try{
+        const interviews = await interviewModel
+            .find({ userId: req.userId })
+            .select("role experience mode finalScore status createdAt")
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json(interviews); 
+
+
+    }catch(error){
+        res.status(500).json({
+            message: `Failed to find current user's interview history: ${error}`
+        })
+    }
+}
+
+async function getInterviewReport(req,res) {
+    try{
+        const interview = await interviewModel.findById(req.params.id);
+
+        if(!interview){
+            return res.status(404).json({message: "Interview not found"})
+        }
+
+        const totalQuestions = interview.questions.length;
+
+        let totalConfidence = 0;
+        let totalCommunication = 0;
+        let totalCorrectness = 0;
+
+        interview.questions.forEach((q)=>{
+
+            totalCommunication+=q.communication || 0;
+
+            totalConfidence+=q.confidence || 0;
+
+            totalCorrectness+=q.correctness || 0;
+        });
+
+        const avgConfidence = totalQuestions? totalConfidence/totalQuestions : 0;
+
+        const avgCommunication = totalQuestions? totalCommunication/totalQuestions : 0;
+
+        const avgCorrectness = totalQuestions? totalCorrectness/totalQuestions : 0;
+
+        return res.json({
+            finalScore: Number((interview.finalScore || 0).toFixed(1)),
+            confidence:Number(avgConfidence.toFixed(1)),
+            communication:Number(avgCommunication.toFixed(1)),
+            correctness:Number(avgCorrectness.toFixed(1)),
+            questionWiseScore: interview.questions
+        });
+
+    }catch(error){
+        res.status(500).json({
+            message: `Failed to find current user's interview Report: ${error}`
+        })
+    }
+}
+
+export  {analyzeResume,generateQuestions,submitAnswer,finishInterview,getInterviewHistory,getInterviewReport};
