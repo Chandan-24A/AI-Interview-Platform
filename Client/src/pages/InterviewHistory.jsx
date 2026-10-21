@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { serverUrl } from "../App";
+import { serverUrl } from "../App.jsx";
 import { FaArrowLeft, FaPlay, FaArrowRight, FaSpinner } from "react-icons/fa";
 import ErrorPage from "./ErrorPage.jsx";
 import { HistorySkeleton } from "../components/SkeletonLoader.jsx";

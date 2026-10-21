@@ -1,7 +1,7 @@
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { serverUrl } from "../App";
+import { serverUrl } from "../App.jsx";
 import Report from "../components/Report.jsx";
 import ErrorPage from "./ErrorPage.jsx";
 import { ReportSkeleton } from "../components/SkeletonLoader.jsx";

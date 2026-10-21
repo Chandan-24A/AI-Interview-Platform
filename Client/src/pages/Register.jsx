@@ -4,7 +4,7 @@ import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { serverUrl } from "../App.jsx";
 import { useDispatch } from "react-redux";
-import { setUserData } from "../redux/userSlice";
+import { setUserData } from "../redux/userSlice.js";
 import { useState } from "react";
 
 const Register = () => {

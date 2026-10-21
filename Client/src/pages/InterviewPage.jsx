@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import Setup from "../components/Setup.jsx";
 import Interview from "../components/Interview.jsx";
-import Report from "../components/Report";
+import Report from "../components/Report.jsx";
 
 const InterviewPage = () => {
   const location = useLocation();
