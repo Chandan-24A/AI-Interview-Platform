@@ -1,10 +1,14 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import Setup from "../components/Setup.jsx";
 import Interview from "../components/Interview.jsx";
 import Report from "../components/Report";
 
 const InterviewPage = () => {
+  const location = useLocation();
+
   const [step, setStep] = useState(() => {
+    if (location.state?.resumeData) return 2;
     try {
       const saved = sessionStorage.getItem("active_interview");
       if (saved) {
@@ -20,6 +24,7 @@ const InterviewPage = () => {
   });
 
   const [interviewData, setInterviewData] = useState(() => {
+    if (location.state?.resumeData) return location.state.resumeData;
     try {
       const saved = sessionStorage.getItem("active_interview");
       if (saved) {
@@ -32,6 +37,14 @@ const InterviewPage = () => {
     return null;
   });
 
+  // Handle incoming resume data from navigation state
+  useEffect(() => {
+    if (location.state?.resumeData) {
+      setInterviewData(location.state.resumeData);
+      setStep(2);
+    }
+  }, [location.state?.resumeData]);
+
   useEffect(() => {
     if (step === 2 && interviewData) {
       sessionStorage.setItem(
@@ -42,6 +55,12 @@ const InterviewPage = () => {
       sessionStorage.removeItem("active_interview");
     }
   }, [step, interviewData]);
+
+  const handleAbort = () => {
+    sessionStorage.removeItem("active_interview");
+    setInterviewData(null);
+    setStep(1);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -57,6 +76,7 @@ const InterviewPage = () => {
       {step === 2 && interviewData && (
         <Interview
           interviewData={interviewData}
+          onAbort={handleAbort}
           onFinish={(report) => {
             sessionStorage.removeItem("active_interview");
             setInterviewData(report);

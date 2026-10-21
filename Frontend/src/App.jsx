@@ -11,6 +11,7 @@ import InterviewPage from './pages/InterviewPage.jsx';
 import InterviewHistory from './pages/InterviewHistory.jsx';
 import InterviewReport from './pages/InterviewReport.jsx';
 import ErrorPage from './pages/ErrorPage.jsx';
+import AILoadingScreen from './components/AILoadingScreen.jsx';
 
 export const serverUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
@@ -20,8 +21,17 @@ const ProtectedRoute = ({ children }) => {
 
   if (!isAuthChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-emerald-50/50 via-white to-teal-50/30">
+        <AILoadingScreen
+          title="Initializing Interview Workspace"
+          subtitle="Verifying credentials and synchronizing session"
+          badge="Security Check"
+          steps={[
+            "Checking authentication credentials...",
+            "Loading profile and preferences...",
+            "Preparing AI interview workspace...",
+          ]}
+        />
       </div>
     );
   }

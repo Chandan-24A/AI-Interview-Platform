@@ -517,11 +517,200 @@ async function getInterviewReport(req, res) {
     }
 }
 
+async function abortInterview(req, res) {
+    try {
+        const { interviewId } = req.body;
+
+        if (!interviewId || !mongoose.Types.ObjectId.isValid(interviewId)) {
+            return res.status(400).json({ message: "Invalid interview ID" });
+        }
+
+        const interview = await interviewModel.findById(interviewId);
+        if (!interview) {
+            return res.status(404).json({ message: "Interview not found" });
+        }
+
+        // Ownership verification
+        if (interview.userId.toString() !== req.userId.toString()) {
+            return res.status(403).json({ message: "Unauthorized to abort this interview" });
+        }
+
+        interview.status = "Incomplete";
+        await interview.save();
+
+        return res.status(200).json({
+            message: "Interview marked as incomplete",
+            interviewId: interview._id,
+            status: interview.status,
+        });
+    } catch (error) {
+        console.error("abortInterview error:", error);
+        return res.status(500).json({
+            message: `Failed to abort interview: ${error.message || error}`,
+        });
+    }
+}
+
+async function resumeInterview(req, res) {
+    try {
+        const { id } = req.params;
+
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid interview ID" });
+        }
+
+        const interview = await interviewModel.findById(id);
+        if (!interview) {
+            return res.status(404).json({ message: "Interview not found" });
+        }
+
+        // Ownership verification
+        if (interview.userId.toString() !== req.userId.toString()) {
+            return res.status(403).json({ message: "Unauthorized to access this interview" });
+        }
+
+        const user = await userModel.findById(req.userId);
+
+        // Find the first question index that doesn't have an answer
+        let startIndex = interview.questions.findIndex((q) => !q.answer || !q.answer.trim());
+        if (startIndex === -1) {
+            startIndex = Math.max(0, interview.questions.length - 1);
+        }
+
+        return res.status(200).json({
+            interviewId: interview._id,
+            jobDescription: interview.jobDescription || interview.role,
+            role: interview.role || interview.jobDescription,
+            experience: interview.experience,
+            mode: interview.mode,
+            userName: user?.username || "Candidate",
+            questions: interview.questions,
+            startIndex,
+            status: interview.status,
+        });
+    } catch (error) {
+        console.error("resumeInterview error:", error);
+        return res.status(500).json({
+            message: `Failed to resume interview: ${error.message || error}`,
+        });
+    }
+}
+
+/*
+  Analyze ATS score, skills match, and missing requirements between candidate's resume and job description
+*/
+async function analyzeAtsScore(req, res) {
+    try {
+        const { resumeText, jobDescription, role, skills, experience, projects } = req.body;
+        const targetJobDescription = (jobDescription || role || "").trim();
+
+        if (!resumeText || !resumeText.trim()) {
+            return res.status(400).json({ message: "Resume content is required for ATS analysis." });
+        }
+
+        if (!targetJobDescription) {
+            return res.status(400).json({
+                message: "Target job description or role is required to evaluate ATS match.",
+            });
+        }
+
+        const messages = [
+            {
+                role: "system",
+                content: `
+                You are an expert ATS (Applicant Tracking System) scanner and senior technical hiring manager.
+                Analyze the candidate's resume content against the target Job Description / Role.
+                1. Calculate a realistic ATS compatibility score from 0 to 100 based on keyword overlap, required vs possessed technical skills, experience alignment, and role domain.
+                2. Identify matched skills (skills from candidate's resume that directly match or satisfy the job description requirements).
+                3. Identify missing/required skills (important skills, tools, or requirements from the job description that are NOT found in candidate's resume).
+                4. Provide an honest, insightful 2-3 sentence overall fit summary explaining how well they fit this particular role.
+                5. Provide 2-4 key recommendations on how they can bridge skill gaps or strengthen their resume and interview answers for this role.
+
+                Return strictly JSON without markdown:
+                {
+                    "atsScore": 82,
+                    "scoreLevel": "Strong Match",
+                    "summary": "Your background shows strong alignment with...",
+                    "matchedSkills": ["Skill 1", "Skill 2"],
+                    "missingSkills": ["Skill 3", "Skill 4"],
+                    "keyRecommendations": [
+                        "Highlight experience with...",
+                        "Add projects demonstrating..."
+                    ]
+                }
+                `,
+            },
+            {
+                role: "user",
+                content: `
+                TARGET JOB DESCRIPTION / ROLE:
+                ${targetJobDescription}
+
+                CANDIDATE RESUME TEXT:
+                ${resumeText.slice(0, 10000)}
+
+                ${skills && Array.isArray(skills) && skills.length ? `EXTRACTED SKILLS: ${skills.join(", ")}` : ""}
+                ${experience ? `CANDIDATE EXPERIENCE: ${experience}` : ""}
+                ${projects && Array.isArray(projects) && projects.length ? `PROJECTS: ${projects.join(", ")}` : ""}
+                `,
+            },
+        ];
+
+        const aiResponse = await askAi(messages);
+        const parsed = extractJSON(aiResponse) || {};
+
+        let rawScore = parseInt(parsed.atsScore, 10);
+        if (isNaN(rawScore)) rawScore = 70;
+        const atsScore = Math.max(0, Math.min(100, rawScore));
+
+        let scoreLevel = parsed.scoreLevel;
+        if (!scoreLevel) {
+            if (atsScore >= 75) scoreLevel = "Strong Match";
+            else if (atsScore >= 50) scoreLevel = "Moderate Match";
+            else scoreLevel = "Needs Improvement";
+        }
+
+        const matchedSkills = Array.isArray(parsed.matchedSkills)
+            ? parsed.matchedSkills.map((s) => String(s).trim()).filter(Boolean)
+            : [];
+
+        const missingSkills = Array.isArray(parsed.missingSkills)
+            ? parsed.missingSkills.map((s) => String(s).trim()).filter(Boolean)
+            : [];
+
+        const keyRecommendations = Array.isArray(parsed.keyRecommendations)
+            ? parsed.keyRecommendations.map((r) => String(r).trim()).filter(Boolean)
+            : [];
+
+        const summary =
+            parsed.summary ||
+            `Candidate profile has an estimated ${atsScore}% ATS compatibility with the target role.`;
+
+        return res.status(200).json({
+            atsScore,
+            scoreLevel,
+            summary,
+            matchedSkills,
+            missingSkills,
+            keyRecommendations,
+            jobDescription: targetJobDescription,
+        });
+    } catch (error) {
+        console.error("ATS analysis error:", error);
+        return res.status(500).json({
+            message: `Failed to analyze ATS score: ${error.message || error}`,
+        });
+    }
+}
+
 export {
     analyzeResume,
     generateQuestions,
     submitAnswer,
     finishInterview,
+    abortInterview,
+    resumeInterview,
+    analyzeAtsScore,
     getInterviewHistory,
     getInterviewReport,
 };

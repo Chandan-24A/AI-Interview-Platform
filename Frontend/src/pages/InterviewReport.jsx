@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import { serverUrl } from "../App";
 import Report from "../components/Report.jsx";
 import ErrorPage from "./ErrorPage.jsx";
+import { ReportSkeleton } from "../components/SkeletonLoader.jsx";
 
 const InterviewReport = () => {
   const { id } = useParams();
@@ -30,7 +31,13 @@ const InterviewReport = () => {
         let type = "something-went-wrong";
         if (status === 401 || status === 403) type = "unauthorized";
         else if (status === 404) type = "not-found";
-        else if (status === 503 || !err.response) type = "server-unavailable";
+        else if (
+          status === 502 ||
+          status === 503 ||
+          status === 504 ||
+          !err.response
+        )
+          type = "server-unavailable";
 
         setErrorInfo({
           type,
@@ -47,16 +54,16 @@ const InterviewReport = () => {
   }, [id]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mb-4"></div>
-        <p className="text-gray-500 text-lg">Loading Report...</p>
-      </div>
-    );
+    return <ReportSkeleton />;
   }
 
   if (errorInfo) {
-    return <ErrorPage type={errorInfo.type} error={{ message: errorInfo.message }} />;
+    return (
+      <ErrorPage
+        type={errorInfo.type}
+        error={{ message: errorInfo.message }}
+      />
+    );
   }
 
   return <Report report={report} />;

@@ -1,37 +1,61 @@
 import maleVideo from "../assets/videos/male-ai.mp4";
 import femaleVideo from "../assets/videos/female-ai.mp4";
 import Timer from "./Timer.jsx";
-import { motion } from "motion/react";
-import { FaMicrophone, FaMicrophoneSlash } from "react-icons/fa";
+import { motion, AnimatePresence } from "motion/react";
+import AILoadingScreen from "./AILoadingScreen.jsx";
+import {
+  FaMicrophone,
+  FaMicrophoneSlash,
+  FaMale,
+  FaFemale,
+  FaPause,
+} from "react-icons/fa";
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { serverUrl } from "../App.jsx";
 import { BsArrowRight } from "react-icons/bs";
 
-const Interview = ({ interviewData, onFinish }) => {
+const Interview = ({ interviewData, onFinish, onAbort }) => {
+  const navigate = useNavigate();
   const { interviewId, questions = [], userName, username } = interviewData || {};
   const candidateName = userName || username || "Candidate";
 
-  const [isIntroPhase, setIsIntroPhase] = useState(true);
+  const initialIndex = Math.min(
+    Math.max(0, Number(interviewData?.startIndex) || 0),
+    Math.max(0, questions.length - 1)
+  );
+
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  // Skip intro speech if resuming an interview at a later question
+  const [isIntroPhase, setIsIntroPhase] = useState(initialIndex === 0);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isAIPlaying, setIsAIPlaying] = useState(false);
 
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [feedback, setFeedback] = useState("");
-  const [timeLeft, setTimeLeft] = useState(questions[0]?.timeLimit || 60);
+  const [timeLeft, setTimeLeft] = useState(questions[initialIndex]?.timeLimit || 60);
 
   const [selectedVoice, setSelectedVoice] = useState(null);
+  const [voicesReady, setVoicesReady] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
+  const [showAbortModal, setShowAbortModal] = useState(false);
+  const [isAborting, setIsAborting] = useState(false);
   const [voiceGender, setVoiceGender] = useState("female");
   const [subtitle, setSubtitle] = useState("");
   const [submissionError, setSubmissionError] = useState("");
+
+  const femaleVoiceRef = useRef(null);
+  const maleVoiceRef = useRef(null);
+  const voiceGenderRef = useRef("female");
+  const currentSpeakingTextRef = useRef("");
 
   const recogRef = useRef(null);
   const isListeningRef = useRef(false);
   const shouldListenRef = useRef(true);
   const isAIPlayingRef = useRef(false);
-  const isIntroPhaseRef = useRef(true);
+  const isIntroPhaseRef = useRef(initialIndex === 0);
   const feedbackRef = useRef("");
 
   const videoRef = useRef(null);
@@ -52,6 +76,10 @@ const Interview = ({ interviewData, onFinish }) => {
     isAIPlayingRef.current = isAIPlaying;
   }, [isAIPlaying]);
 
+  useEffect(() => {
+    voiceGenderRef.current = voiceGender;
+  }, [voiceGender]);
+
   // Reset timer whenever currentIndex changes
   useEffect(() => {
     if (questions[currentIndex]?.timeLimit) {
@@ -61,7 +89,7 @@ const Interview = ({ interviewData, onFinish }) => {
     }
   }, [currentIndex, questions]);
 
-  // Load available speech synthesis voices
+  // Load available speech synthesis voices and categorize male vs female
   useEffect(() => {
     const loadVoices = () => {
       if (typeof window === "undefined" || !window.speechSynthesis) return;
@@ -70,13 +98,26 @@ const Interview = ({ interviewData, onFinish }) => {
       if (!voices.length) return;
 
       // Helper to identify male voices
-      const isMaleVoice = (v) => {
+      const isMale = (v) => {
         const n = v.name.toLowerCase();
-        return n.includes("david") || n.includes("mark") || n.includes("guy") || n.includes("george") || n.includes("male");
+        return (
+          n.includes("david") ||
+          n.includes("mark") ||
+          n.includes("guy") ||
+          n.includes("george") ||
+          n.includes("male") ||
+          n.includes("james") ||
+          n.includes("richard") ||
+          n.includes("daniel") ||
+          n.includes("alex") ||
+          n.includes("microsoft guy") ||
+          n.includes("microsoft david") ||
+          n.includes("google uk english male")
+        );
       };
 
       // Helper to identify female voices
-      const isFemaleVoice = (v) => {
+      const isFemale = (v) => {
         const n = v.name.toLowerCase();
         return (
           (n.includes("zira") ||
@@ -86,28 +127,28 @@ const Interview = ({ interviewData, onFinish }) => {
             n.includes("female") ||
             n.includes("victoria") ||
             n.includes("karen") ||
+            n.includes("susan") ||
+            n.includes("microsoft zira") ||
+            n.includes("microsoft aria") ||
+            n.includes("microsoft jenny") ||
+            n.includes("google uk english female") ||
             n.includes("google us english")) &&
-          !isMaleVoice(v)
+          !isMale(v)
         );
       };
 
-      const femaleVoice = voices.find(isFemaleVoice);
-      if (femaleVoice) {
-        setSelectedVoice(femaleVoice);
-        setVoiceGender("female");
-        return;
-      }
+      const foundFemale =
+        voices.find(isFemale) || voices.find((v) => !isMale(v)) || voices[0];
+      const foundMale =
+        voices.find(isMale) || voices.find((v) => v !== foundFemale) || voices[0];
 
-      const maleVoice = voices.find(isMaleVoice);
-      if (maleVoice) {
-        setSelectedVoice(maleVoice);
-        setVoiceGender("male");
-        return;
-      }
+      femaleVoiceRef.current = foundFemale;
+      maleVoiceRef.current = foundMale;
 
-      // fallback: first voice (default female avatar)
-      setSelectedVoice(voices[0]);
-      setVoiceGender("female");
+      const currentTarget =
+        voiceGenderRef.current === "male" ? foundMale : foundFemale;
+      setSelectedVoice(currentTarget);
+      setVoicesReady(true);
     };
 
     loadVoices();
@@ -125,6 +166,68 @@ const Interview = ({ interviewData, onFinish }) => {
   }, []);
 
   const videoSource = voiceGender === "male" ? maleVideo : femaleVideo;
+
+  // Auto-resume video playing if switched mid-sentence
+  useEffect(() => {
+    if (isAIPlayingRef.current && videoRef.current) {
+      videoRef.current.play().catch(() => {});
+    }
+  }, [videoSource]);
+
+  // Handler to toggle interviewer gender dynamically
+  const handleGenderSwitch = (targetGender) => {
+    if (targetGender === voiceGender) return;
+
+    setVoiceGender(targetGender);
+    voiceGenderRef.current = targetGender;
+
+    const targetVoice =
+      targetGender === "male"
+        ? maleVoiceRef.current
+        : femaleVoiceRef.current;
+    if (targetVoice) {
+      setSelectedVoice(targetVoice);
+    }
+
+    // If AI is currently speaking, cancel old voice and immediately speak with the new one
+    if (
+      typeof window !== "undefined" &&
+      window.speechSynthesis &&
+      isAIPlayingRef.current &&
+      currentSpeakingTextRef.current
+    ) {
+      window.speechSynthesis.cancel();
+      speakText(currentSpeakingTextRef.current);
+    }
+  };
+
+  // Handler to confirm aborting / pausing the interview
+  const handleConfirmAbort = async () => {
+    stopMic();
+    setIsMicOn(false);
+    shouldListenRef.current = false;
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    setIsAborting(true);
+    try {
+      await axios.post(
+        `${serverUrl}/api/interview/abort-interview`,
+        { interviewId },
+        { withCredentials: true }
+      );
+    } catch (err) {
+      console.warn("Abort interview request error:", err.message);
+    } finally {
+      setIsAborting(false);
+      setShowAbortModal(false);
+      if (onAbort) {
+        onAbort();
+      }
+      navigate("/history");
+    }
+  };
 
   // Initialize Speech Recognition once
   useEffect(() => {
@@ -234,12 +337,13 @@ const Interview = ({ interviewData, onFinish }) => {
       if (
         typeof window === "undefined" ||
         !window.speechSynthesis ||
-        !selectedVoice ||
         !text
       ) {
         resolve();
         return;
       }
+
+      currentSpeakingTextRef.current = text;
 
       // Stop mic immediately before speech starts so AI voice is not recorded
       stopMic();
@@ -249,9 +353,18 @@ const Interview = ({ interviewData, onFinish }) => {
       const utterance = new SpeechSynthesisUtterance(humanText);
       utteranceRef.current = utterance;
 
-      utterance.voice = selectedVoice;
+      const isMale = voiceGenderRef.current === "male";
+      const targetVoice = isMale
+        ? maleVoiceRef.current || selectedVoice
+        : femaleVoiceRef.current || selectedVoice;
+
+      if (targetVoice) {
+        utterance.voice = targetVoice;
+      }
+
+      // Provide natural gendered acoustic profiles
       utterance.rate = 0.95;
-      utterance.pitch = 1.0;
+      utterance.pitch = isMale ? 0.88 : 1.05;
       utterance.volume = 1;
 
       utterance.onstart = () => {
@@ -301,7 +414,7 @@ const Interview = ({ interviewData, onFinish }) => {
 
   // Run intro and question voice flows
   useEffect(() => {
-    if (!selectedVoice) return;
+    if (!voicesReady) return;
 
     let isCancelled = false;
 
@@ -339,7 +452,7 @@ const Interview = ({ interviewData, onFinish }) => {
         window.speechSynthesis.cancel();
       }
     };
-  }, [selectedVoice, isIntroPhase, currentIndex]);
+  }, [voicesReady, isIntroPhase, currentIndex]);
 
   // Timer countdown: ticks ONLY during active answering (not intro, not AI speaking, not submitting, not feedback)
   useEffect(() => {
@@ -426,6 +539,7 @@ const Interview = ({ interviewData, onFinish }) => {
     setIsMicOn(false);
     shouldListenRef.current = false;
     setSubmissionError("");
+    setIsFinishing(true);
 
     try {
       const result = await axios.post(
@@ -440,6 +554,7 @@ const Interview = ({ interviewData, onFinish }) => {
       setSubmissionError(
         error.response?.data?.message || "Failed to finalize interview. Please try again."
       );
+      setIsFinishing(false);
     }
   };
 
@@ -469,172 +584,289 @@ const Interview = ({ interviewData, onFinish }) => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-emerald-50 via-white to-teal-100 flex items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-350 min-h-[80vh] bg-white rounded-3xl shadow-2xl border border-gray-200 flex flex-col lg:flex-row overflow-hidden">
-        {/* Video / Avatar Section */}
-        <div className="w-full lg:w-[35%] bg-white flex flex-col items-center p-6 space-y-6 border-r border-gray-200">
-          <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-xl">
-            <video
-              src={videoSource}
-              key={videoSource}
-              ref={videoRef}
-              muted
-              playsInline
-              preload="auto"
-              className="w-full h-auto object-cover"
-            />
-          </div>
+    <>
+      <AnimatePresence>
+        {isFinishing && (
+          <AILoadingScreen
+            isOverlay={true}
+            title="Evaluating Your Interview"
+            subtitle="Synthesizing question responses and calculating performance analytics"
+            badge="AI Evaluator Active"
+            steps={[
+              "Aggregating question-by-question responses...",
+              "Evaluating speech confidence and presentation clarity...",
+              "Measuring communication effectiveness and vocabulary...",
+              "Scoring technical accuracy and completeness...",
+              "Synthesizing actionable feedback and next steps...",
+              "Finalizing your performance dashboard...",
+            ]}
+          />
+        )}
+      </AnimatePresence>
 
-          {/* Subtitles */}
-          {subtitle && (
-            <div className="w-full max-w-md bg-gray-50 border border-gray-200 rounded-xl shadow-sm p-4">
-              <p className="text-gray-700 text-sm sm:text-base font-medium text-center leading-relaxed">
-                {subtitle}
+      {/* Confirmation Modal to Abort / Pause Interview */}
+      <AnimatePresence>
+        {showAbortModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 15 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-gray-100 text-center"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-4 text-2xl shadow-xs">
+                <FaPause />
+              </div>
+
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                Pause & Exit Interview?
+              </h3>
+
+              <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+                You don't need to finish all questions right now. Your answered questions are saved, and this interview will be marked as <span className="font-semibold text-amber-700">Incomplete</span>. You can resume anytime from your <strong>Interview History</strong> page.
               </p>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAbortModal(false)}
+                  disabled={isAborting}
+                  className="flex-1 py-2.5 px-4 rounded-xl text-sm font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 transition cursor-pointer"
+                >
+                  Continue Interview
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleConfirmAbort}
+                  disabled={isAborting}
+                  className="flex-1 py-2.5 px-4 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-md transition cursor-pointer disabled:opacity-50"
+                >
+                  {isAborting ? "Pausing..." : "Save & Exit"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <div className="min-h-screen bg-linear-to-br from-emerald-50 via-white to-teal-100 flex items-center justify-center p-4 sm:p-6">
+        <div className="w-full max-w-350 min-h-[80vh] bg-white rounded-3xl shadow-2xl border border-gray-200 flex flex-col lg:flex-row overflow-hidden">
+          {/* Video / Avatar Section */}
+          <div className="w-full lg:w-[35%] bg-white flex flex-col items-center p-6 space-y-5 border-r border-gray-200">
+            
+            {/* Interviewer Gender Toggle Switch */}
+            <div className="w-full max-w-md flex items-center justify-between bg-gray-50 border border-gray-200 p-1.5 rounded-2xl shadow-xs">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider pl-3">
+                Interviewer
+              </span>
+
+              <div className="flex items-center gap-1 bg-gray-200/70 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => handleGenderSwitch("female")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    voiceGender === "female"
+                      ? "bg-white text-emerald-700 shadow-sm font-bold"
+                      : "text-gray-600 hover:text-black"
+                  }`}
+                  title="Switch to Female Interviewer"
+                >
+                  <FaFemale size={13} />
+                  <span>Female</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleGenderSwitch("male")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    voiceGender === "male"
+                      ? "bg-white text-emerald-700 shadow-sm font-bold"
+                      : "text-gray-600 hover:text-black"
+                  }`}
+                  title="Switch to Male Interviewer"
+                >
+                  <FaMale size={13} />
+                  <span>Male</span>
+                </button>
+              </div>
             </div>
-          )}
 
-          {/* Timer Section */}
-          <div className="w-full max-w-md bg-white border border-gray-200 rounded-2xl shadow-md p-6 space-y-5">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500">Interview Status</span>
-
-              {isAIPlaying ? (
-                <span className="text-sm font-semibold text-emerald-600 animate-pulse">
-                  AI Speaking...
-                </span>
-              ) : isIntroPhase ? (
-                <span className="text-sm font-semibold text-teal-600">
-                  Introduction
-                </span>
-              ) : (
-                <span className="text-sm font-semibold text-gray-600">
-                  Your Turn
-                </span>
-              )}
-            </div>
-
-            <div className="h-px bg-gray-200"></div>
-
-            <div className="flex justify-center">
-              <Timer
-                timeLeft={timeLeft}
-                totalTime={currentQuestion?.timeLimit || 60}
+            <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-xl relative bg-black">
+              <video
+                src={videoSource}
+                key={videoSource}
+                ref={videoRef}
+                muted
+                playsInline
+                preload="auto"
+                className="w-full h-auto object-cover"
               />
             </div>
 
-            <div className="h-px bg-gray-200"></div>
+            {/* Subtitles */}
+            {subtitle && (
+              <div className="w-full max-w-md bg-gray-50 border border-gray-200 rounded-xl shadow-sm p-4">
+                <p className="text-gray-700 text-sm sm:text-base font-medium text-center leading-relaxed">
+                  {subtitle}
+                </p>
+              </div>
+            )}
 
-            <div className="grid grid-cols-2 gap-6 text-center">
-              <div>
-                <span className="text-2xl font-bold text-emerald-600">
-                  {currentIndex + 1}
-                </span>
-                <span className="block text-xs text-gray-400">
-                  Current Question
-                </span>
+            {/* Timer Section */}
+            <div className="w-full max-w-md bg-white border border-gray-200 rounded-2xl shadow-md p-6 space-y-5">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-500">Interview Status</span>
+
+                {isAIPlaying ? (
+                  <span className="text-sm font-semibold text-emerald-600 animate-pulse">
+                    AI Speaking...
+                  </span>
+                ) : isIntroPhase ? (
+                  <span className="text-sm font-semibold text-teal-600">
+                    Introduction
+                  </span>
+                ) : (
+                  <span className="text-sm font-semibold text-gray-600">
+                    Your Turn
+                  </span>
+                )}
               </div>
 
-              <div>
-                <span className="text-2xl font-bold text-emerald-600">
-                  {questions.length}
-                </span>
-                <span className="block text-xs text-gray-400">
-                  Total Questions
-                </span>
+              <div className="h-px bg-gray-200"></div>
+
+              <div className="flex justify-center">
+                <Timer
+                  timeLeft={timeLeft}
+                  totalTime={currentQuestion?.timeLimit || 60}
+                />
+              </div>
+
+              <div className="h-px bg-gray-200"></div>
+
+              <div className="grid grid-cols-2 gap-6 text-center">
+                <div>
+                  <span className="text-2xl font-bold text-emerald-600">
+                    {currentIndex + 1}
+                  </span>
+                  <span className="block text-xs text-gray-400">
+                    Current Question
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-2xl font-bold text-emerald-600">
+                    {questions.length}
+                  </span>
+                  <span className="block text-xs text-gray-400">
+                    Total Questions
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Question & Answer Section */}
-        <div className="flex-1 flex flex-col p-4 sm:p-6 md:p-8 relative">
-          <h2 className="text-xl sm:text-2xl font-bold text-emerald-600 mb-6">
-            AI Smart Interview
-          </h2>
-
-          {!isIntroPhase && (
-            <div className="relative mb-6 bg-gray-50 p-4 sm:p-6 rounded-2xl border border-gray-200 shadow-sm">
-              <p className="text-xs sm:text-sm text-gray-400 mb-2">
-                Question {currentIndex + 1} of {questions.length}
-              </p>
-
-              <div className="text-base sm:text-lg font-semibold text-gray-800 leading-relaxed pr-16">
-                {currentQuestion?.question}
-              </div>
-            </div>
-          )}
-
-          <textarea
-            onChange={(e) => setAnswer(e.target.value)}
-            value={answer}
-            disabled={isIntroPhase || Boolean(feedback)}
-            placeholder={
-              isIntroPhase
-                ? "The AI is introducing the interview..."
-                : feedback
-                ? "Answer submitted."
-                : "Type your answer here or speak using the microphone..."
-            }
-            className="flex-1 bg-gray-100 p-4 sm:p-6 rounded-2xl resize-none outline-none border border-gray-200 focus:ring-2 focus:ring-emerald-500 transition text-gray-800 disabled:opacity-60"
-          />
-
-          {submissionError && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl text-center">
-              {submissionError}
-            </div>
-          )}
-
-          {!feedback ? (
-            <div className="flex items-center gap-4 mt-6">
-              <motion.button
-                onClick={toggleMic}
-                disabled={isIntroPhase}
-                whileTap={{ scale: 0.9 }}
-                className={`w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-full text-white shadow-lg transition ${
-                  isMicOn ? "bg-black hover:bg-gray-800" : "bg-red-500 hover:bg-red-600"
-                } disabled:opacity-50`}
-                title={isMicOn ? "Mute Microphone" : "Unmute Microphone"}
-              >
-                {isMicOn ? <FaMicrophone size={20} /> : <FaMicrophoneSlash size={20} />}
-              </motion.button>
-
-              <motion.button
-                onClick={submitAnswer}
-                disabled={isSubmitting || isIntroPhase}
-                whileTap={{ scale: 0.95 }}
-                className="flex-1 bg-linear-to-r from-emerald-600 to-teal-500 text-white py-3 sm:py-4 rounded-2xl shadow-lg hover:opacity-90 transition font-semibold disabled:opacity-50"
-              >
-                {isSubmitting ? "Submitting..." : "Submit Answer"}
-              </motion.button>
-            </div>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-6 bg-emerald-50 border border-emerald-200 p-5 rounded-2xl shadow-sm"
-            >
-              <h4 className="text-sm font-semibold text-emerald-800 mb-1">
-                Interviewer Feedback:
-              </h4>
-              <p className="text-emerald-700 font-medium mb-4">
-                {feedback}
-              </p>
+          {/* Question & Answer Section */}
+          <div className="flex-1 flex flex-col p-4 sm:p-6 md:p-8 relative">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl sm:text-2xl font-bold text-emerald-600">
+                AI Smart Interview
+              </h2>
 
               <button
-                onClick={handleNext}
-                className="w-full bg-linear-to-r from-emerald-600 to-teal-500 text-white py-3 rounded-xl shadow-md hover:opacity-90 transition flex items-center justify-center gap-2 font-semibold"
+                type="button"
+                onClick={() => setShowAbortModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
+                title="Pause and exit interview"
               >
-                {currentIndex + 1 >= questions.length
-                  ? "Finish Interview & View Report"
-                  : "Next Question"}
-                <BsArrowRight size={18} />
+                <FaPause size={10} />
+                <span>Pause & Exit</span>
               </button>
-            </motion.div>
-          )}
+            </div>
+
+            {!isIntroPhase && (
+              <div className="relative mb-6 bg-gray-50 p-4 sm:p-6 rounded-2xl border border-gray-200 shadow-sm">
+                <p className="text-xs sm:text-sm text-gray-400 mb-2">
+                  Question {currentIndex + 1} of {questions.length}
+                </p>
+
+                <div className="text-base sm:text-lg font-semibold text-gray-800 leading-relaxed pr-16">
+                  {currentQuestion?.question}
+                </div>
+              </div>
+            )}
+
+            <textarea
+              onChange={(e) => setAnswer(e.target.value)}
+              value={answer}
+              disabled={isIntroPhase || Boolean(feedback)}
+              placeholder={
+                isIntroPhase
+                  ? "The AI is introducing the interview..."
+                  : feedback
+                  ? "Answer submitted."
+                  : "Type your answer here or speak using the microphone..."
+              }
+              className="flex-1 bg-gray-100 p-4 sm:p-6 rounded-2xl resize-none outline-none border border-gray-200 focus:ring-2 focus:ring-emerald-500 transition text-gray-800 disabled:opacity-60"
+            />
+
+            {submissionError && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl text-center">
+                {submissionError}
+              </div>
+            )}
+
+            {!feedback ? (
+              <div className="flex items-center gap-4 mt-6">
+                <motion.button
+                  onClick={toggleMic}
+                  disabled={isIntroPhase}
+                  whileTap={{ scale: 0.9 }}
+                  className={`w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-full text-white shadow-lg transition ${
+                    isMicOn ? "bg-black hover:bg-gray-800" : "bg-red-500 hover:bg-red-600"
+                  } disabled:opacity-50`}
+                  title={isMicOn ? "Mute Microphone" : "Unmute Microphone"}
+                >
+                  {isMicOn ? <FaMicrophone size={20} /> : <FaMicrophoneSlash size={20} />}
+                </motion.button>
+
+                <motion.button
+                  onClick={submitAnswer}
+                  disabled={isSubmitting || isIntroPhase}
+                  whileTap={{ scale: 0.95 }}
+                  className="flex-1 bg-linear-to-r from-emerald-600 to-teal-500 text-white py-3 sm:py-4 rounded-2xl shadow-lg hover:opacity-90 transition font-semibold disabled:opacity-50"
+                >
+                  {isSubmitting ? "Submitting..." : "Submit Answer"}
+                </motion.button>
+              </div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-6 bg-emerald-50 border border-emerald-200 p-5 rounded-2xl shadow-sm"
+              >
+                <h4 className="text-sm font-semibold text-emerald-800 mb-1">
+                  Interviewer Feedback:
+                </h4>
+                <p className="text-emerald-700 font-medium mb-4">
+                  {feedback}
+                </p>
+
+                <button
+                  onClick={handleNext}
+                  className="w-full bg-linear-to-r from-emerald-600 to-teal-500 text-white py-3 rounded-xl shadow-md hover:opacity-90 transition flex items-center justify-center gap-2 font-semibold"
+                >
+                  {currentIndex + 1 >= questions.length
+                    ? "Finish Interview & View Report"
+                    : "Next Question"}
+                  <BsArrowRight size={18} />
+                </button>
+              </motion.div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
