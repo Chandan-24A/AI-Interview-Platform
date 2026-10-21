@@ -53,7 +53,7 @@ const Home = () => {
           animate={{opacity:1}}
           transition={{duration:0.8}}
           className="text-gray-500 mt-8 max-w-2xl mx-auto text-lg">
-            Role based mock interviews with smart follow-ups,adaptive difficulty and real-time performance evaluation.
+            Job Description based mock interviews with smart follow-ups, adaptive difficulty, and real-time performance evaluation.
           </motion.p>
 
           <div className="flex flex-wrap justify-center gap-4 mt-10">
@@ -68,7 +68,7 @@ const Home = () => {
             whileHover={{opacity:0.9 , scale:1.03}}
             whileTap={{opacity:1,scale:0.97}}
             transition={{duration:0.2}}
-            className="bg-black text-white px-10 py-3 rounded-full hover:opacity-10 transition shadow-md">
+            className="bg-black text-white px-10 py-3 rounded-full hover:bg-gray-800 transition shadow-md">
               Start Interview
             </motion.button>
 
@@ -94,7 +94,7 @@ const Home = () => {
               {
                 icon:<RiRobot2Fill size={24}/>,
                 step: "STEP 1",
-                title: "Role and Experience Selection",
+                title: "Job Description & Experience",
                 des:  "AI adjusts difficulty based on  selected job roles"
               },
               {

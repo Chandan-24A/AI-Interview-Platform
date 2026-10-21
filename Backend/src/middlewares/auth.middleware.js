@@ -1,46 +1,46 @@
-import userModel from "../models/user.model.js";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
 import blackListModel from "../models/blacklist.model.js";
 
 /*
- -auth Middleware 
- -check user is authenticated or not
+  Auth Middleware: Verifies JWT token from cookies or Authorization header.
+  Checks token against the blacklist and extracts req.userId.
 */
+async function authMiddleware(req, res, next) {
+    const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
 
-async function authMiddleware(req,res,next){
-    const token = req.cookies.token || req.headers.authorization?.split(" ")[ 1 ];
-
-    if(!token){
-        return res.status(400).json({
-            message:"Invalid Token,Unautherized access"
-        })
+    if (!token) {
+        return res.status(401).json({
+            message: "Authentication required",
+        });
     }
 
-    const isValid = await blackListModel.findOne({token})
+    try {
+        const isBlacklisted = await blackListModel.findOne({ token });
+        if (isBlacklisted) {
+            return res.status(401).json({
+                message: "Session expired or logged out. Please log in again.",
+            });
+        }
 
-    if(isValid){
-        return res.status(409).json({
-            message:"Unautherized Access"
-        })
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.userId = decoded.userId;
+        next();
+    } catch (err) {
+        if (err.name === "TokenExpiredError") {
+            return res.status(401).json({
+                message: "Token has expired. Please log in again.",
+            });
+        }
+        if (err.name === "JsonWebTokenError") {
+            return res.status(401).json({
+                message: "Invalid token. Please log in again.",
+            });
+        }
+        console.error("Auth middleware error:", err);
+        return res.status(500).json({
+            message: "Internal server error during authentication",
+        });
     }
-
-    try{
-        const decoded = await jwt.verify(token,process.env.JWT_SECRET)
-
-        req.userId = decoded.userId
-
-        next()
-
-    }catch(err){
-        console.log(err);
-        res.status(500).json({
-
-            message:"Server Unavailable"
-        })
-    }   
-
-
 }
 
 export default authMiddleware;

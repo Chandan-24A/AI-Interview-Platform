@@ -6,60 +6,64 @@ const questionSchema = new mongoose.Schema({
     timeLimit: Number,
     answer: String,
     feedback: String,
-    score:{
+    score: {
         type: Number,
-        default:0
+        default: 0,
     },
-    confidence:{
-        type:Number,
-        default:0
-    },
-    communication:{
+    confidence: {
         type: Number,
-        default:0,
+        default: 0,
     },
-    correctness:{
+    communication: {
         type: Number,
-        default:0
-    }
+        default: 0,
+    },
+    correctness: {
+        type: Number,
+        default: 0,
+    },
 });
 
-const interviewSchema = new mongoose.Schema({
-    userId:{
-        type:mongoose.Schema.Types.ObjectId,
-        ref:"user",
-        required:true
+const interviewSchema = new mongoose.Schema(
+    {
+        userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "user",
+            required: true,
+        },
+        jobDescription: {
+            type: String,
+            required: true,
+        },
+        role: {
+            type: String,
+        },
+        experience: {
+            type: String,
+            required: true,
+        },
+        mode: {
+            type: String,
+            enum: ["HR", "Technical"],
+            required: true,
+        },
+        resumeText: {
+            type: String,
+        },
+        questions: [questionSchema],
+        finalScore: {
+            type: Number,
+            default: 0,
+        },
+        status: {
+            type: String,
+            enum: ["Incomplete", "Incompleted", "Completed"],
+            default: "Incomplete",
+        },
     },
-    role:{
-        type:String,
-        required:true
-    },
-    experience:{
-        type:String,
-        required:true
-    },
-    mode:{
-        type:String,
-        enum:["HR","Technical"],
-        required:true
-    },
-    resumeText:{
-        type:String
-    },
-    questions:[questionSchema],
-    finalScore:{
-        type:Number,
-        default:0
-    },
-    status:{
-        type:String,
-        enum:["Incompleted","Completed"],
-        default:"Incompleted"
-    }
+    { timestamps: true }
+);
 
-
-},{timestamps:true});
-
-const interviewModel = mongoose.model("interview",interviewSchema);
+const interviewModel = mongoose.model("interview", interviewSchema);
 
 export default interviewModel;

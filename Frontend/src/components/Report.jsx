@@ -4,6 +4,9 @@ import { motion } from "framer-motion";
 import { buildStyles, CircularProgressbar } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
 import {Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis} from "recharts";
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
+
 const Report = ({report}) => {
   if(!report){
     return (
@@ -32,11 +35,11 @@ const Report = ({report}) => {
   let shortTagLine = "";
 
   if(finalScore >= 8){
-    performanceText = "Ready for the upcoming job oppertunities.";
-    shortTagLine = "Excellent clarity and Structured responses.";
+    performanceText = "Ready for upcoming job opportunities.";
+    shortTagLine = "Excellent clarity and structured responses.";
   }else if(finalScore >= 5){
     performanceText = "Needs minor improvement before interviews.";
-    shortTagLine = "Good Foundation, refine articulation";
+    shortTagLine = "Good foundation, refine articulation.";
   }else{
     performanceText = "Significant improvement required.";
     shortTagLine = "Work on clarity and confidence.";
@@ -44,9 +47,271 @@ const Report = ({report}) => {
 
   const navigate = useNavigate();
 
-  const score = finalScore/10;
+  const score = Number(finalScore) || 0;
 
-  const percentage = (score/10)*100;  
+  const percentage = Math.min(100,Math.max(0,(score/10)*100));  
+
+  const downloadPDF = () => {
+    const doc = new jsPDF("p", "mm", "a4");
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    const margin = 20;
+    const contentWidth = pageWidth - margin * 2; // 170mm on A4
+    const footerY = pageHeight - 10;
+
+    const green = [34, 197, 94];
+    const darkGreen = [22, 101, 52];
+    const lightGreen = [240, 253, 244];
+    const lightGray = [249, 250, 251];
+    const darkText = [31, 41, 55];
+    const mutedText = [55, 65, 81];
+
+    let currentY = 22;
+
+    // Sanitize text (removes stray newlines/extra spaces that break PDF wrapping)
+    const cleanText = (val, fallback = "N/A") =>
+        String(val ?? fallback)
+            .replace(/\r?\n|\r/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+    // Helper: Always call AFTER setting the target font & fontSize
+    const wrapText = (value, width) =>
+        doc.splitTextToSize(cleanText(value), width);
+
+    // 1. Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.setTextColor(...green);
+
+    const titleLines = wrapText("AI Interview Performance Report", contentWidth);
+    doc.text(titleLines, pageWidth / 2, currentY, { align: "center" });
+
+    currentY += titleLines.length * 8;
+
+    // Underline
+    doc.setDrawColor(...green);
+    doc.setLineWidth(0.7);
+    doc.line(margin, currentY, pageWidth - margin, currentY);
+
+    currentY += 10;
+
+    // 2. Final Score Banner
+    const numericScore = Number(finalScore) || 0;
+
+    doc.setFillColor(...lightGreen);
+    doc.roundedRect(margin, currentY, contentWidth, 20, 4, 4, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(...darkGreen);
+
+    const scoreText = `Final Score: ${numericScore}/10`;
+    doc.text(scoreText, pageWidth / 2, currentY + 12.5, { align: "center" });
+
+    currentY += 28;
+
+    // 3. Skills Assessment Box
+    const skills = [
+        ["Confidence", confidence],
+        ["Communication", communication],
+        ["Correctness", correctness],
+    ];
+
+    const boxPadding = 8;
+    const labelWidth = 38;
+    const valueWidth = contentWidth - boxPadding * 2 - labelWidth;
+    const lineHeight = 5;
+
+    // Set font BEFORE measuring wrapped lines
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+
+    const skillRows = skills.map(([label, value]) => ({
+        label,
+        lines: wrapText(value, valueWidth),
+    }));
+
+    const skillHeight =
+        16 +
+        skillRows.reduce(
+            (height, row) =>
+                height + Math.max(lineHeight, row.lines.length * lineHeight) + 2.5,
+            0
+        );
+
+    doc.setFillColor(...lightGray);
+    doc.roundedRect(margin, currentY, contentWidth, skillHeight, 4, 4, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...mutedText);
+    doc.text("Skills Assessment", margin + boxPadding, currentY + 9);
+
+    let skillY = currentY + 16;
+
+    skillRows.forEach(({ label, lines }) => {
+        const rowHeight = Math.max(lineHeight, lines.length * lineHeight);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+        doc.setTextColor(...mutedText);
+        doc.text(label, margin + boxPadding, skillY);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9.5);
+        doc.setTextColor(...darkText);
+        // Do not pass maxWidth here since lines are already split
+        doc.text(lines, margin + boxPadding + labelWidth, skillY);
+
+        skillY += rowHeight + 2.5;
+    });
+
+    currentY += skillHeight + 8;
+
+    // 4. Personalized Feedback Box
+    let advice = "";
+    if (numericScore >= 8) {
+        advice =
+            "Excellent performance! Maintain your confidence and structured approach. Continue refining clarity and supporting your answers with strong real-world examples.";
+    } else if (numericScore >= 5) {
+        advice =
+            "Good foundation demonstrated. Improve clarity and structure, and practice delivering concise, confident answers supported by relevant examples.";
+    } else {
+        advice =
+            "Further improvement is needed. Focus on structured thinking, clarity, and confident delivery. Practice answering interview questions aloud regularly.";
+    }
+
+    // Set exact font size BEFORE calling wrapText so width calculations match
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+
+    const adviceInnerWidth = contentWidth - boxPadding * 2;
+    const adviceLines = wrapText(advice, adviceInnerWidth);
+    const adviceLineHeight = 5;
+    const adviceHeight = 16 + adviceLines.length * adviceLineHeight + 4;
+
+    if (currentY + adviceHeight + 10 > footerY - 8) {
+        doc.addPage();
+        currentY = 22;
+    }
+
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(margin, currentY, contentWidth, adviceHeight, 4, 4, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...green);
+    doc.text("Personalized Feedback", margin + boxPadding, currentY + 9);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...mutedText);
+    // Render pre-wrapped array with consistent lineHeightFactor (no duplicate maxWidth)
+    doc.text(adviceLines, margin + boxPadding, currentY + 16, {
+        lineHeightFactor: 1.35,
+    });
+
+    currentY += adviceHeight + 10;
+
+    // 5. Question-wise Performance Table
+    const questionRows = (questionWiseScore || []).map((q, i) => [
+        String(i + 1),
+        cleanText(q.question, "N/A"),
+        `${q.score ?? 0}/10`,
+        cleanText(q.feedback, "No feedback available."),
+    ]);
+
+    autoTable(doc, {
+        startY: currentY,
+        tableWidth: contentWidth,
+        margin: {
+            left: margin,
+            right: margin,
+            top: 20,
+            bottom: 18,
+        },
+        head: [["#", "Question", "Score", "Feedback"]],
+        body: questionRows,
+        theme: "grid",
+        styles: {
+            font: "helvetica",
+            fontSize: 9,
+            cellPadding: 4, // Increased padding prevents right-edge character clipping
+            valign: "top",
+            overflow: "linebreak",
+            textColor: mutedText,
+            lineColor: [229, 231, 235],
+            lineWidth: 0.2,
+        },
+        headStyles: {
+            fillColor: green,
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+            halign: "center",
+            valign: "middle",
+            cellPadding: 3.5,
+        },
+        columnStyles: {
+            0: {
+                cellWidth: 12,
+                halign: "center",
+            },
+            1: {
+                cellWidth: 62,
+                overflow: "linebreak",
+                halign: "left",
+            },
+            2: {
+                cellWidth: 18,
+                halign: "center",
+            },
+            3: {
+                // Uses 'auto' to safely fill remaining 78mm without clipping
+                cellWidth: "auto",
+                overflow: "linebreak",
+                halign: "left",
+            },
+        },
+        alternateRowStyles: {
+            fillColor: lightGray,
+        },
+        // Prevents a single question row from splitting across two pages
+        rowPageBreak: "avoid",
+        showHead: "everyPage",
+        pageBreak: "auto",
+    });
+
+    // 6. Footer and Page Numbers
+    const totalPages = doc.internal.getNumberOfPages();
+
+    for (let page = 1; page <= totalPages; page++) {
+        doc.setPage(page);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(107, 114, 128);
+
+        doc.text(
+            "AI Interview Platform | Performance Report",
+            margin,
+            footerY
+        );
+
+        doc.text(
+            `Page ${page} of ${totalPages}`,
+            pageWidth - margin,
+            footerY,
+            { align: "right" }
+        );
+    }
+
+    doc.save("AI_Interview_Report.pdf");
+};
 
   return (
     <div className="min-h-screen bg-linear-to-br from-gray-50 to-green-50 px-4 sm:px-6 lg:px-10 py-8">
@@ -68,7 +333,9 @@ const Report = ({report}) => {
             </div>
           </div>
 
-          <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl shadow-md transiton-all duration-300 font-semibold text-sm sm:text-base text-nowrap">
+          <button
+          onClick={downloadPDF} 
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl shadow-md transition-all duration-300 font-semibold text-sm sm:text-base text-nowrap cursor-pointer">
             Download PDF
           </button>
       </div>
@@ -220,199 +487,3 @@ const Report = ({report}) => {
 }
 
 export default Report
-
-
-
-
-
-// import { motion } from "motion/react";
-// import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
-// import "react-circular-progressbar/dist/styles.css";
-// import { FaCheckCircle, FaRedo, FaHome, FaChartBar, FaComments, FaAward } from "react-icons/fa";
-// import { useNavigate } from "react-router-dom";
-
-// const Report = ({ report }) => {
-//   const navigate = useNavigate();
-
-//   const {
-//     finalScore = 0,
-//     confidence = 0,
-//     communication = 0,
-//     correctness = 0,
-//     questionWiseScore = [],
-//   } = report || {};
-
-//   const scorePercentage = Math.min(100, Math.round((finalScore / 10) * 100));
-
-//   const getScoreBadge = (score) => {
-//     if (score >= 8) return { label: "Excellent", color: "text-emerald-600 bg-emerald-50 border-emerald-200" };
-//     if (score >= 6) return { label: "Good", color: "text-teal-600 bg-teal-50 border-teal-200" };
-//     if (score >= 4) return { label: "Average", color: "text-amber-600 bg-amber-50 border-amber-200" };
-//     return { label: "Needs Improvement", color: "text-red-600 bg-red-50 border-red-200" };
-//   };
-
-//   const badge = getScoreBadge(finalScore);
-
-//   return (
-//     <div className="min-h-screen bg-linear-to-br from-emerald-50 via-white to-teal-50 py-10 px-4 sm:px-6">
-//       <div className="max-w-4xl mx-auto space-y-8">
-//         {/* Header card */}
-//         <motion.div
-//           initial={{ opacity: 0, y: 20 }}
-//           animate={{ opacity: 1, y: 0 }}
-//           className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8 sm:p-10 text-center relative overflow-hidden"
-//         >
-//           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold border mb-4 shadow-xs border-emerald-200 text-emerald-700 bg-emerald-50">
-//             <FaCheckCircle className="text-emerald-500" /> Interview Completed
-//           </div>
-
-//           <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-800 mb-2">
-//             Interview Performance Report
-//           </h1>
-//           <p className="text-gray-500 max-w-xl mx-auto text-sm sm:text-base">
-//             Detailed evaluation of your answers, communication skills, confidence, and correctness.
-//           </p>
-
-//           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-8">
-//             <div className="w-32 h-32">
-//               <CircularProgressbar
-//                 value={scorePercentage}
-//                 text={`${finalScore}/10`}
-//                 styles={buildStyles({
-//                   textSize: "20px",
-//                   pathColor: finalScore >= 6 ? "#10b981" : "#f59e0b",
-//                   textColor: "#1f2937",
-//                   trailColor: "#e5e7eb",
-//                 })}
-//               />
-//             </div>
-
-//             <div className="text-left space-y-2">
-//               <span className={`inline-block px-3 py-1 text-xs font-bold rounded-lg border ${badge.color}`}>
-//                 {badge.label}
-//               </span>
-//               <p className="text-2xl font-bold text-gray-800">
-//                 Overall Score: {finalScore} <span className="text-sm font-normal text-gray-400">/ 10</span>
-//               </p>
-//               <p className="text-xs text-gray-500 max-w-xs">
-//                 Calculated from your answers across all interview questions.
-//               </p>
-//             </div>
-//           </div>
-//         </motion.div>
-
-//         {/* Breakdown Metrics */}
-//         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-//           <motion.div
-//             initial={{ opacity: 0, y: 20 }}
-//             animate={{ opacity: 1, y: 0 }}
-//             transition={{ delay: 0.1 }}
-//             className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 flex items-center gap-4"
-//           >
-//             <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center text-xl">
-//               <FaAward />
-//             </div>
-//             <div>
-//               <p className="text-xs text-gray-400 uppercase font-semibold">Confidence</p>
-//               <p className="text-2xl font-bold text-gray-800">{confidence} <span className="text-xs font-normal text-gray-400">/ 10</span></p>
-//             </div>
-//           </motion.div>
-
-//           <motion.div
-//             initial={{ opacity: 0, y: 20 }}
-//             animate={{ opacity: 1, y: 0 }}
-//             transition={{ delay: 0.15 }}
-//             className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 flex items-center gap-4"
-//           >
-//             <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl">
-//               <FaComments />
-//             </div>
-//             <div>
-//               <p className="text-xs text-gray-400 uppercase font-semibold">Communication</p>
-//               <p className="text-2xl font-bold text-gray-800">{communication} <span className="text-xs font-normal text-gray-400">/ 10</span></p>
-//             </div>
-//           </motion.div>
-
-//           <motion.div
-//             initial={{ opacity: 0, y: 20 }}
-//             animate={{ opacity: 1, y: 0 }}
-//             transition={{ delay: 0.2 }}
-//             className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 flex items-center gap-4"
-//           >
-//             <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl">
-//               <FaChartBar />
-//             </div>
-//             <div>
-//               <p className="text-xs text-gray-400 uppercase font-semibold">Correctness</p>
-//               <p className="text-2xl font-bold text-gray-800">{correctness} <span className="text-xs font-normal text-gray-400">/ 10</span></p>
-//             </div>
-//           </motion.div>
-//         </div>
-
-//         {/* Per-question breakdown */}
-//         <motion.div
-//           initial={{ opacity: 0, y: 20 }}
-//           animate={{ opacity: 1, y: 0 }}
-//           transition={{ delay: 0.25 }}
-//           className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6 sm:p-8 space-y-6"
-//         >
-//           <h2 className="text-xl font-bold text-gray-800">Question-by-Question Feedback</h2>
-
-//           {questionWiseScore.length === 0 ? (
-//             <p className="text-gray-400 text-sm">No questions evaluated.</p>
-//           ) : (
-//             <div className="space-y-4">
-//               {questionWiseScore.map((q, idx) => (
-//                 <div
-//                   key={idx}
-//                   className="p-5 rounded-2xl bg-gray-50 border border-gray-200/70 space-y-2"
-//                 >
-//                   <div className="flex items-start justify-between gap-4">
-//                     <p className="font-semibold text-gray-800 text-sm sm:text-base">
-//                       <span className="text-emerald-600 mr-2">Q{idx + 1}.</span>
-//                       {q.question}
-//                     </p>
-//                     <span className="shrink-0 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-700">
-//                       Score: {q.score}/10
-//                     </span>
-//                   </div>
-
-//                   {q.feedback && (
-//                     <div className="bg-white p-3 rounded-xl border border-gray-200/50 text-xs sm:text-sm text-gray-600">
-//                       <strong className="text-gray-700">Feedback: </strong>
-//                       {q.feedback}
-//                     </div>
-//                   )}
-
-//                   <div className="flex gap-4 pt-1 text-xs text-gray-500">
-//                     <span>Confidence: <strong>{q.confidence ?? 0}/10</strong></span>
-//                     <span>Communication: <strong>{q.communication ?? 0}/10</strong></span>
-//                     <span>Correctness: <strong>{q.correctness ?? 0}/10</strong></span>
-//                   </div>
-//                 </div>
-//               ))}
-//             </div>
-//           )}
-//         </motion.div>
-
-//         {/* Navigation Action Buttons */}
-//         <div className="flex justify-center gap-4 pb-12">
-//           <button
-//             onClick={() => window.location.reload()}
-//             className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-full font-semibold shadow-md transition"
-//           >
-//             <FaRedo size={14} /> Practice Again
-//           </button>
-//           <button
-//             onClick={() => navigate("/")}
-//             className="flex items-center gap-2 bg-gray-800 hover:bg-black text-white px-6 py-3 rounded-full font-semibold shadow-md transition"
-//           >
-//             <FaHome size={14} /> Back to Home
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default Report;

@@ -1,177 +1,182 @@
 import userModel from "../models/user.model.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
-import {sendRegistrationEmail, sendLoginEmail } from "../services/email.service.js";
+import { sendRegistrationEmail, sendLoginEmail } from "../services/email.service.js";
 import blackListModel from "../models/blacklist.model.js";
 
 /*
- Registration Controller
+  Registration Controller
   - Token based Authentication
   - bcrypt for password hash
   - nodemailer to send email on Successful Registration
 */
+async function registerController(req, res) {
+    const { username, email, password } = req.body;
 
-async function registerController(req,res){
+    if (!username || !email || !password) {
+        return res.status(400).json({ message: "Username, email and password are required" });
+    }
 
-    const {username,email,password} = req.body;
-
-    try{
+    try {
         const isExist = await userModel.findOne({
-            $or:[
-              {email},
-              {username}
-            ]
-        })
+            $or: [{ email }, { username }],
+        });
 
-        if(isExist){
-            return res.status(409).json({message:"User already exists with this email or username"});
+        if (isExist) {
+            return res.status(409).json({ message: "User already exists with this email or username" });
         }
 
-        const hashedpass = await bcrypt.hash(password,10);
+        const hashedpass = await bcrypt.hash(password, 10);
+        const user = await userModel.create({ email, username, password: hashedpass });
 
-        const user = await userModel.create({email,username,password:hashedpass});
+        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+            expiresIn: "7d",
+        });
 
-        const token = await jwt.sign(
-            {userId:user._id},
-            process.env.JWT_SECRET,
-            {expiresIn:"7d"},
-        )
-
-        res.cookie("token",token,{httpOnly:true,secure: process.env.NODE_ENV === "production",sameSite:"strict",maxAge:7*24*60*60*1000});
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
 
         res.status(201).json({
-            message:"user created successfully",
-            user:{
-                id:user._id,
-                email:user.email,
-                username:user.username,
-            }
-        })
+            message: "User created successfully",
+            user: {
+                id: user._id,
+                email: user.email,
+                username: user.username,
+            },
+        });
 
-        sendRegistrationEmail(email,username).catch(err => console.error('Failed to send registration email:', err));
-
-    }catch(err){
-        console.error("Error in authentication:", err);
-
+        sendRegistrationEmail(email, username).catch((err) =>
+            console.error("Failed to send registration email:", err.message)
+        );
+    } catch (err) {
+        console.error("Error in registration:", err);
         return res.status(500).json({
-            message: "Internal server error"
+            message: "Internal server error",
         });
     }
 }
 
 /*
- Login Controller
+  Login Controller
   - Token based Authentication
   - bcrypt for password Verification
   - nodemailer to send email on Successful Login
 */
+async function loginController(req, res) {
+    const { email, password } = req.body;
 
-async function loginController(req,res){
-    const {email,password} = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+    }
 
-    try{
-        const user = await userModel.findOne({email});
+    try {
+        const user = await userModel.findOne({ email });
 
-        if(!user){
+        if (!user) {
             return res.status(404).json({
-                message:"User doesnot exist,login failed"
+                message: "User does not exist, login failed",
             });
         }
 
-        const userpassword = user.password;
+        const isValid = await bcrypt.compare(password, user.password);
 
-        const isValid = await bcrypt.compare(password,userpassword);
-
-        if(!isValid){
+        if (!isValid) {
             return res.status(401).json({
-                message:"Invalid Password",
-            })
+                message: "Invalid Password",
+            });
         }
 
-        const token = await jwt.sign({userId:user._id},process.env.JWT_SECRET,{expiresIn:"7d"});
-
-        res.cookie("token",token,{httpOnly:true,secure: process.env.NODE_ENV === "production",sameSite:"strict",maxAge:7*24*60*60*1000});
-
-        res.status(200).json({
-            message:"User logged in sucessfully",
-            user:{
-                id:user._id,
-                email:user.email,
-                username:user.username,
-            }
+        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+            expiresIn: "7d",
         });
 
-        sendLoginEmail(email,user.username).catch(err => console.error('Failed to send registration email:', err));
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
 
-    }catch(err){
+        res.status(200).json({
+            message: "User logged in successfully",
+            user: {
+                id: user._id,
+                email: user.email,
+                username: user.username,
+            },
+        });
+
+        sendLoginEmail(email, user.username).catch((err) =>
+            console.error("Failed to send login email:", err.message)
+        );
+    } catch (err) {
+        console.error("Login error:", err);
         return res.status(500).json({
-            message: "Internal server error"
+            message: "Internal server error",
         });
     }
 }
 
-async function getMe(req,res){
-    try{
-
+async function getMe(req, res) {
+    try {
         const user = await userModel.findById(req.userId).select("-password");
 
         if (!user) {
             return res.status(404).json({
-                message: "User not found"
+                message: "User not found",
             });
         }
 
         return res.status(200).json({
-            message:"User details fetched successfully",
-            user:{
-                id:user._id,
-                email:user.email,
-                username:user.username,
-            }
-        })
-
-    }catch(err){
-        console.log(err);
+            message: "User details fetched successfully",
+            user: {
+                id: user._id,
+                email: user.email,
+                username: user.username,
+            },
+        });
+    } catch (err) {
+        console.error("getMe error:", err);
         res.status(500).json({
-
-            message:"Server Unavailable"
-        })
-    }
-
-}
-
-async function logOutController(req,res){
-    const token = req.cookies.token || req.headers.authorization?.split(" ")[ 1 ];
-
-    if(!token){
-        return res.status(409).json({
-            message:"Invalid Token , Can't access user details"
-        })
-    }
-
-    const isValid = await blackListModel.findOne({token});
-
-    if(isValid){
-        return res.status(409).json({
-            message:"Invalid Token , Can't access user details"
-        })
-    }
-
-    try{
-        jwt.verify(token,process.env.JWT_SECRET);
-
-        await blackListModel.create({token:token});
-
-        res.clearCookie("token");
-
-        res.status(200).json({
-            message:"User Logged out Successfully"
-        })
-    }catch(err){
-        res.status(401).json({
-            message:"Invalid Token"
-        })
+            message: "Server Unavailable",
+        });
     }
 }
 
-export {registerController,loginController,getMe,logOutController};
+async function logOutController(req, res) {
+    const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
+
+    res.clearCookie("token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+    });
+
+    if (!token) {
+        return res.status(200).json({
+            message: "Logged out successfully",
+        });
+    }
+
+    try {
+        const alreadyBlacklisted = await blackListModel.findOne({ token });
+        if (!alreadyBlacklisted) {
+            await blackListModel.create({ token });
+        }
+
+        return res.status(200).json({
+            message: "User Logged out Successfully",
+        });
+    } catch (err) {
+        // Even if blacklist fails (e.g., duplicate key), cookie is cleared
+        return res.status(200).json({
+            message: "User Logged out Successfully",
+        });
+    }
+}
+
+export { registerController, loginController, getMe, logOutController };

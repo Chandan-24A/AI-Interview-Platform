@@ -13,6 +13,8 @@
     "@reduxjs/toolkit": "^2.13.0",
     "@tailwindcss/vite": "^4.3.3",
     "axios": "^1.20.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "motion": "^13.2.0",
     "react": "^19.2.6",
     "react-circular-progressbar": "^2.2.0",

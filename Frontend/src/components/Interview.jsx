@@ -25,6 +25,7 @@ const Interview = ({ interviewData, onFinish }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [voiceGender, setVoiceGender] = useState("female");
   const [subtitle, setSubtitle] = useState("");
+  const [submissionError, setSubmissionError] = useState("");
 
   const recogRef = useRef(null);
   const isListeningRef = useRef(false);
@@ -68,37 +69,43 @@ const Interview = ({ interviewData, onFinish }) => {
       const voices = window.speechSynthesis.getVoices();
       if (!voices.length) return;
 
-      // try known female voices
-      const femaleVoice = voices.find(
-        (v) =>
-          v.name.toLowerCase().includes("zira") ||
-          v.name.toLowerCase().includes("samantha") ||
-          v.name.toLowerCase().includes("female") ||
-          v.name.toLowerCase().includes("natural") ||
-          v.name.toLowerCase().includes("google us english")
-      );
+      // Helper to identify male voices
+      const isMaleVoice = (v) => {
+        const n = v.name.toLowerCase();
+        return n.includes("david") || n.includes("mark") || n.includes("guy") || n.includes("george") || n.includes("male");
+      };
 
+      // Helper to identify female voices
+      const isFemaleVoice = (v) => {
+        const n = v.name.toLowerCase();
+        return (
+          (n.includes("zira") ||
+            n.includes("samantha") ||
+            n.includes("aria") ||
+            n.includes("jenny") ||
+            n.includes("female") ||
+            n.includes("victoria") ||
+            n.includes("karen") ||
+            n.includes("google us english")) &&
+          !isMaleVoice(v)
+        );
+      };
+
+      const femaleVoice = voices.find(isFemaleVoice);
       if (femaleVoice) {
         setSelectedVoice(femaleVoice);
         setVoiceGender("female");
         return;
       }
 
-      // try known male voices
-      const maleVoice = voices.find(
-        (v) =>
-          v.name.toLowerCase().includes("david") ||
-          v.name.toLowerCase().includes("mark") ||
-          v.name.toLowerCase().includes("male")
-      );
-
+      const maleVoice = voices.find(isMaleVoice);
       if (maleVoice) {
         setSelectedVoice(maleVoice);
         setVoiceGender("male");
         return;
       }
 
-      // fallback: first voice (assume female)
+      // fallback: first voice (default female avatar)
       setSelectedVoice(voices[0]);
       setVoiceGender("female");
     };
@@ -360,6 +367,7 @@ const Interview = ({ interviewData, onFinish }) => {
 
     stopMic();
     setIsSubmitting(true);
+    setSubmissionError("");
 
     try {
       const timeTaken = Math.max(
@@ -384,7 +392,10 @@ const Interview = ({ interviewData, onFinish }) => {
 
       speakText(responseFeedback);
     } catch (error) {
-      console.log(error);
+      console.error("Submit answer error:", error);
+      setSubmissionError(
+        error.response?.data?.message || "Failed to submit answer. Please try clicking submit again."
+      );
       setIsSubmitting(false);
     }
   };
@@ -395,6 +406,7 @@ const Interview = ({ interviewData, onFinish }) => {
     }
     setAnswer("");
     setFeedback("");
+    setSubmissionError("");
 
     if (currentIndex + 1 >= questions.length) {
       finishInterview();
@@ -413,6 +425,7 @@ const Interview = ({ interviewData, onFinish }) => {
     stopMic();
     setIsMicOn(false);
     shouldListenRef.current = false;
+    setSubmissionError("");
 
     try {
       const result = await axios.post(
@@ -423,7 +436,10 @@ const Interview = ({ interviewData, onFinish }) => {
 
       onFinish(result.data);
     } catch (error) {
-      console.log(error);
+      console.error("Finish interview error:", error);
+      setSubmissionError(
+        error.response?.data?.message || "Failed to finalize interview. Please try again."
+      );
     }
   };
 
@@ -562,6 +578,12 @@ const Interview = ({ interviewData, onFinish }) => {
             }
             className="flex-1 bg-gray-100 p-4 sm:p-6 rounded-2xl resize-none outline-none border border-gray-200 focus:ring-2 focus:ring-emerald-500 transition text-gray-800 disabled:opacity-60"
           />
+
+          {submissionError && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl text-center">
+              {submissionError}
+            </div>
+          )}
 
           {!feedback ? (
             <div className="flex items-center gap-4 mt-6">
