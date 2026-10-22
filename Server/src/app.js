@@ -6,6 +6,8 @@ import interviewRouter from "./routes/interview.routes.js";
 
 const app = express();
 
+app.set("trust proxy",1); // for Express to know that it is behind a reverse proxt(Render)
+
 app.use(express.json());
 app.use(cookieParser());
 app.use(
@@ -14,6 +16,8 @@ app.use(
         credentials: true,
     })
 );
+
+app.get("/health",(req,res)=> res.status(200).json({status:"healthy"}));
 
 app.use("/api/auth", authRouter);
 app.use("/api/interview", interviewRouter);

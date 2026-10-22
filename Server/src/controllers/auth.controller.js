@@ -10,6 +10,9 @@ import blackListModel from "../models/blacklist.model.js";
   - bcrypt for password hash
   - nodemailer to send email on Successful Registration
 */
+
+const isProd = process.env.NODE_ENV === "production";
+
 async function registerController(req, res) {
     const { username, email, password } = req.body;
 
@@ -35,8 +38,8 @@ async function registerController(req, res) {
 
         res.cookie("token", token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
+            secure: isProd,
+            sameSite: isProd ? "none" : "lax",
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
@@ -96,8 +99,8 @@ async function loginController(req, res) {
 
         res.cookie("token", token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
+            secure: isProd,
+            sameSite: isProd ? "none" : "lax",
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
@@ -152,8 +155,8 @@ async function logOutController(req, res) {
 
     res.clearCookie("token", {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        secure: isProd,
+        sameSite: isProd ?  "none" : "lax",
     });
 
     if (!token) {

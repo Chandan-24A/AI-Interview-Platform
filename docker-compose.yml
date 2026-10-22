@@ -1,0 +1,35 @@
+services:
+  backend:
+    build:
+      context: ./Server
+      dockerfile: Dockerfile
+    container_name: AI_interview_backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./Server/.env
+    environment:
+      - PORT=3000
+      - CLIENT_URL=http://localhost:5173
+    networks:
+      - app_network
+
+  frontend:
+    build:
+      context: ./Client
+      dockerfile: Dockerfile
+      args:
+        - VITE_BACKEND_URL=http://localhost:3000
+    container_name: AI_interview_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
