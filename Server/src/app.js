@@ -17,7 +17,8 @@ app.use(
     })
 );
 
-app.get("/health",(req,res)=> res.status(200).json({status:"healthy"}));
+app.get("/", (req, res) => res.status(200).json({ message: "AI Interview Platform API is running", status: "healthy" }));
+app.get("/health", (req, res) => res.status(200).json({ status: "healthy" }));
 
 app.use("/api/auth", authRouter);
 app.use("/api/interview", interviewRouter);
