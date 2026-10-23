@@ -1,6 +1,9 @@
+import dns from "node:dns";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
 
+// Render containers do not have outbound IPv6 routing; force IPv4 resolution
+dns.setDefaultResultOrder("ipv4first");
 dotenv.config();
 
 function getCredentials() {
@@ -20,6 +23,7 @@ function createTransporter() {
         host: "smtp.gmail.com",
         port: 465,
         secure: true, // Port 465 SSL for cloud containers (Render)
+        family: 4,    // Force IPv4 to prevent ENETUNREACH on Render/Docker
         auth: { user, pass },
         connectionTimeout: 10000,
     });
