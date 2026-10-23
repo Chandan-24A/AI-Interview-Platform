@@ -9,14 +9,14 @@ import { verifyEmailService, sendEmail } from "../services/email.service.js";
 
 const router = express.Router();
 
-// Diagnostic endpoint to test email configuration in production
+// Diagnostic endpoint to test Nodemailer configuration (Local development)
 router.get("/test-email", async (req, res) => {
     const diagnostic = await verifyEmailService();
     if (diagnostic.status !== "ready") {
-        return res.status(500).json({
+        return res.status(200).json({
             success: false,
             diagnostic,
-            help: "Add RESEND_API_KEY to Render Environment, or set EMAIL_USER and EMAIL_PASS.",
+            note: "Email notifications via Nodemailer are enabled for local development only and disabled in production.",
         });
     }
 
@@ -32,8 +32,8 @@ router.get("/test-email", async (req, res) => {
     const sendResult = await sendEmail(
         targetEmail,
         "Test Email from AI Interview Platform 🚀",
-        "If you see this, your email service is working in production!",
-        "<div style='font-family: Arial; padding: 20px;'><h2>AI Interview Platform</h2><p>Your email service is working in production! 🎉</p></div>"
+        "If you see this, your local Nodemailer email service is working!",
+        "<div style='font-family: Arial; padding: 20px;'><h2>AI Interview Platform</h2><p>Your local Nodemailer email service is working! 🎉</p></div>"
     );
 
     return res.status(sendResult.success ? 200 : 500).json({

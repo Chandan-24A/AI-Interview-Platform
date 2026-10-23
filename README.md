@@ -64,7 +64,7 @@ InterView-Prep-Ai/
 │   │   │   ├── auth.routes.js      # Authentication API endpoints
 │   │   │   └── interview.routes.js # Resume, ATS, and interview session endpoints
 │   │   ├── services/
-│   │   │   ├── email.service.js    # Resend & Nodemailer transactional emails
+│   │   │   ├── email.service.js    # Nodemailer transactional emails (Local development)
 │   │   │   └── openRouter.service.js# OpenRouter AI gateway & fallback handler
 │   │   └── app.js                  # Express app setup & dynamic CORS configuration
 │   ├── Dockerfile                  # Node 22 Alpine backend container
@@ -133,7 +133,7 @@ InterView-Prep-Ai/
 - **PDF Extraction**: [pdfjs-dist](https://mozilla.github.io/pdf.js/) (with `Promise.withResolvers` polyfill)
 - **File Uploads**: [Multer](https://github.com/expressjs/multer) (disk storage with automated cleanup)
 - **Authentication**: JSON Web Tokens (`jsonwebtoken`) + [bcrypt](https://github.com/kelektiv/node.bcrypt.js)
-- **Email Service**: [Nodemailer](https://nodemailer.com/)
+- **Email Service**: [Nodemailer](https://nodemailer.com/) (Optional - for local development)
 
 ### Deployment & Infrastructure
 - **Containerization**: Docker & Docker Compose (multi-stage builds)
@@ -163,10 +163,10 @@ flowchart TD
         OpenRouter["OpenRouter AI Gateway"]
     end
     
-    subgraph ExternalServices ["External Cloud Services"]
+    subgraph ExternalServices ["External Services"]
         MongoDB[("MongoDB Atlas Database")]
         LLM["OpenRouter LLMs (Gemini / Llama)"]
-        Email["Resend / Email Service"]
+        Email["Nodemailer (Local Development)"]
     end
 
     User <--> UI
@@ -223,15 +223,11 @@ cd InterView-Prep-Ai
    MONGODB_URI=your_mongodb_connection_string
    JWT_SECRET=your_super_secret_jwt_key
    OPENROUTER_API_KEY=your_openrouter_api_key
-   OPENROUTER_MODEL=google/gemini-2.0-flash-exp:free
+   OPENROUTER_MODEL=your_openrouter_model
 
-   # Email notifications (Resend recommended for cloud deployments)
-   RESEND_API_KEY=re_your_resend_api_key
-   # RESEND_FROM=AI Interview Platform <onboarding@resend.dev>
-
-   # Alternative: Nodemailer (SMTP - local dev)
-   # EMAIL_USER=your_email@gmail.com
-   # EMAIL_PASS=your_email_app_password
+   # Optional: Email notifications (Local development only)
+   EMAIL_USER=your_email@gmail.com
+   EMAIL_PASS=your_email_app_password
    ```
 5. Start the development server:
    ```bash
@@ -321,5 +317,4 @@ You can run the entire platform locally using Docker Compose without needing Nod
 > 
 > 1. **Render Free Tier Cold Starts**: Render automatically spins down free backend instances after 15 minutes of inactivity. When you visit the app after it has been idle, the backend takes **30 to 50 seconds to boot up**. The frontend includes an automatic reconnection system that will poll the server and reconnect as soon as it wakes up.
 > 2. **AI Inference Queues**: Free AI models on OpenRouter occasionally experience queue delays during peak traffic hours. Question generation or response evaluation may occasionally take 15–30 seconds.
-> 
-> *Tip: To eliminate Render cold starts entirely, you can set up a free uptime monitor (e.g. via [UptimeRobot](https://uptimerobot.com)) to ping `https://ai-interview-platform-server-467u.onrender.com/health` every 10 minutes.*
+> 3. **Email Notifications**: Transactional emails (welcome and login alerts) are implemented with Nodemailer for **local development**. In free cloud hosting (Render), outbound SMTP ports are blocked, so production authentication functions independently without relying on third-party email relays.

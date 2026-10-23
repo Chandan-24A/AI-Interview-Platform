@@ -1,16 +1,9 @@
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
-import { Resend } from "resend";
 
 dotenv.config();
 
-function getResendKey() {
-    return (process.env.RESEND_API_KEY || "").trim();
-}
-
-function getSenderAddress() {
-    return process.env.RESEND_FROM || "AI Interview Platform <onboarding@resend.dev>";
-}
+const isProduction = process.env.NODE_ENV === "production";
 
 function getSmtpCredentials() {
     const user = (process.env.EMAIL_USER || process.env.EMAIL || "").trim();
@@ -30,117 +23,91 @@ function createSmtpTransporter() {
     });
 }
 
-// Verification function with provider diagnostics
+// Verification function (Active for local development)
 async function verifyEmailService() {
-    const resendKey = getResendKey();
-    if (resendKey) {
+    if (isProduction) {
         return {
-            status: "ready",
-            provider: "resend",
-            sender: getSenderAddress(),
-            message: `Resend email service ready using API key (${resendKey.slice(0, 6)}...${resendKey.slice(-4)})`,
+            status: "disabled_in_production",
+            provider: "nodemailer",
+            message: "Email notifications via Nodemailer are disabled in production (configured for local development only).",
         };
     }
 
     const { user, pass } = getSmtpCredentials();
-    if (user && pass) {
-        try {
-            const transporter = createSmtpTransporter();
-            if (!transporter) {
-                return { status: "disabled", provider: "smtp", message: "SMTP transporter could not be initialized." };
-            }
-            await transporter.verify();
-            return {
-                status: "ready",
-                provider: "smtp",
-                user,
-                message: `SMTP transporter verified and connected for: ${user}`,
-            };
-        } catch (err) {
-            return {
-                status: "error",
-                provider: "smtp",
-                user,
-                message: `SMTP verification failed: ${err.message}`,
-            };
-        }
+    if (!user || !pass) {
+        return {
+            status: "disabled",
+            provider: "nodemailer",
+            message: "EMAIL_USER or EMAIL_PASS not configured. Email notifications disabled for local development.",
+        };
     }
 
-    return {
-        status: "disabled",
-        provider: "none",
-        message: "Neither RESEND_API_KEY nor EMAIL_USER/EMAIL_PASS is configured in environment variables.",
-    };
+    try {
+        const transporter = createSmtpTransporter();
+        if (!transporter) {
+            return { status: "disabled", provider: "nodemailer", message: "Nodemailer transporter could not be initialized." };
+        }
+        await transporter.verify();
+        return {
+            status: "ready",
+            provider: "nodemailer",
+            user,
+            message: `Nodemailer verified and connected for local development: ${user}`,
+        };
+    } catch (err) {
+        return {
+            status: "error",
+            provider: "nodemailer",
+            user,
+            message: `Nodemailer verification failed: ${err.message}`,
+        };
+    }
 }
 
-// Log startup verification result immediately
+// Log startup verification result
 verifyEmailService().then((res) => {
     if (res.status === "ready") {
         console.log(`[Email Service] ${res.message}`);
+    } else if (res.status === "disabled_in_production") {
+        console.log(`[Email Service] ${res.message}`);
     } else {
-        console.warn(`[Email Service] ${res.message}`);
+        console.info(`[Email Service] ${res.message}`);
     }
 });
 
 // Primary email sending function
 const sendEmail = async (to, subject, text, html) => {
-    const resendKey = getResendKey();
-
-    // 1. Resend (HTTPS Port 443 - Works reliably in all cloud environments including Render)
-    if (resendKey) {
-        try {
-            const resend = new Resend(resendKey);
-            const from = getSenderAddress();
-            const recipients = Array.isArray(to) ? to : [to];
-
-            const { data, error } = await resend.emails.send({
-                from,
-                to: recipients,
-                subject,
-                text,
-                html,
-            });
-
-            if (error) {
-                console.error(`[Email Service] Resend error sending to <${to}>:`, error);
-                return { success: false, provider: "resend", error: error.message || error };
-            }
-
-            console.log(`[Email Service] Email sent successfully via Resend to <${to}> (ID: ${data?.id})`);
-            return { success: true, provider: "resend", messageId: data?.id };
-        } catch (error) {
-            console.error(`[Email Service] Unexpected Resend error sending to <${to}>:`, error.message);
-            return { success: false, provider: "resend", error: error.message };
-        }
+    if (isProduction) {
+        // Silently skip in production so free tier hosting does not hang or fail on blocked SMTP ports
+        return { success: true, skipped: true, reason: "disabled_in_production" };
     }
 
-    // 2. SMTP / Nodemailer fallback
     const { user, pass } = getSmtpCredentials();
-    if (user && pass) {
-        try {
-            const transporter = createSmtpTransporter();
-            if (!transporter) {
-                return { success: false, provider: "smtp", reason: "transporter_failed" };
-            }
-
-            const info = await transporter.sendMail({
-                from: `"AI Interview Platform" <${user}>`,
-                to,
-                subject,
-                text,
-                html,
-            });
-
-            console.log(`[Email Service] Email sent successfully via SMTP to <${to}> (ID: ${info.messageId})`);
-            return { success: true, provider: "smtp", messageId: info.messageId };
-        } catch (error) {
-            console.error(`[Email Service] Failed to send email via SMTP to <${to}>:`, error.message);
-            return { success: false, provider: "smtp", error: error.message };
-        }
+    if (!user || !pass) {
+        console.warn(`[Email Service] Cannot send email to <${to}>: EMAIL_USER or EMAIL_PASS not configured.`);
+        return { success: false, skipped: true, reason: "credentials_missing" };
     }
 
-    console.warn(`[Email Service] Cannot send email to <${to}>: No email provider configured (missing RESEND_API_KEY).`);
-    return { success: false, reason: "credentials_missing" };
+    try {
+        const transporter = createSmtpTransporter();
+        if (!transporter) {
+            return { success: false, reason: "transporter_failed" };
+        }
+
+        const info = await transporter.sendMail({
+            from: `"AI Interview Platform" <${user}>`,
+            to,
+            subject,
+            text,
+            html,
+        });
+
+        console.log(`[Email Service] Email sent successfully via Nodemailer to <${to}> (ID: ${info.messageId})`);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error(`[Email Service] Failed to send email via Nodemailer to <${to}>:`, error.message);
+        return { success: false, error: error.message };
+    }
 };
 
 // Registration Email 
