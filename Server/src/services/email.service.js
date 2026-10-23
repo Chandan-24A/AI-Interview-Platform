@@ -3,51 +3,90 @@ import nodemailer from "nodemailer";
 
 dotenv.config();
 
-const isEmailConfigured = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+function getCredentials() {
+    const user = (process.env.EMAIL_USER || process.env.EMAIL || "").trim();
+    const rawPass = (process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || "").trim();
+    // Clean app password: remove internal spaces and surrounding quotes
+    const pass = rawPass.replace(/\s+/g, "").replace(/^["']|["']$/g, "");
+    return { user, pass };
+}
 
-let transporter = null;
-
-if (isEmailConfigured) {
-    transporter = nodemailer.createTransport({
+function createTransporter() {
+    const { user, pass } = getCredentials();
+    if (!user || !pass) {
+        return null;
+    }
+    return nodemailer.createTransport({
         host: "smtp.gmail.com",
         port: 465,
-        secure: true, // SSL on port 465 (highly reliable for cloud containers like Render)
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
-        },
+        secure: true, // Port 465 SSL for cloud containers (Render)
+        auth: { user, pass },
+        connectionTimeout: 10000,
     });
-
-    transporter.verify((error) => {
-        if (error) {
-            console.warn("[Email Service] Connection warning:", error.message);
-        } else {
-            console.log(`[Email Service] Connected & ready to send emails from: ${process.env.EMAIL_USER}`);
-        }
-    });
-} else {
-    console.warn("[Email Service] EMAIL_USER or EMAIL_PASS not set in environment. Outgoing emails are disabled/mocked.");
 }
+
+// Verification function with detailed diagnostic info
+async function verifyEmailService() {
+    const { user, pass } = getCredentials();
+    if (!user || !pass) {
+        return {
+            status: "disabled",
+            message: "EMAIL_USER or EMAIL_PASS is not set in environment variables.",
+            hasUser: Boolean(user),
+            hasPass: Boolean(pass),
+        };
+    }
+
+    const transporter = createTransporter();
+    try {
+        await transporter.verify();
+        return {
+            status: "ready",
+            message: `Email transporter verified and connected for: ${user}`,
+            user,
+        };
+    } catch (err) {
+        return {
+            status: "error",
+            message: `SMTP verification failed: ${err.message}`,
+            user,
+            code: err.code,
+        };
+    }
+}
+
+// Log startup verification result immediately
+verifyEmailService().then((res) => {
+    if (res.status === "ready") {
+        console.log(`[Email Service] ${res.message}`);
+    } else {
+        console.warn(`[Email Service] ${res.message}`);
+    }
+});
 
 // Function to send email
 const sendEmail = async (to, subject, text, html) => {
-    if (!transporter) {
-        console.log(`[Email Mock] Email to <${to}>: "${subject}" (transporter not configured)`);
-        return;
+    const { user, pass } = getCredentials();
+    if (!user || !pass) {
+        console.warn(`[Email Service] Cannot send email to <${to}>: EMAIL_USER or EMAIL_PASS not configured.`);
+        return { success: false, reason: "credentials_missing" };
     }
 
+    const transporter = createTransporter();
     try {
         const info = await transporter.sendMail({
-            from: `"AI Interview Platform" <${process.env.EMAIL_USER}>`,
+            from: `"AI Interview Platform" <${user}>`,
             to,
             subject,
             text,
             html,
         });
 
-        console.log(`[Email Service] Email sent to <${to}> (ID: ${info.messageId})`);
+        console.log(`[Email Service] Email sent successfully to <${to}> (ID: ${info.messageId})`);
+        return { success: true, messageId: info.messageId };
     } catch (error) {
         console.error(`[Email Service] Failed to send email to <${to}>:`, error.message);
+        return { success: false, error: error.message };
     }
 };
 
@@ -100,7 +139,7 @@ AI Interview Platform Team
         </div>
     `;
 
-    await sendEmail(userEmail, subject, text, html);
+    return await sendEmail(userEmail, subject, text, html);
 }
 
 // Login Email
@@ -152,7 +191,7 @@ AI Interview Platform Team
         </div>
     `;
 
-    await sendEmail(userEmail, subject, text, html);
+    return await sendEmail(userEmail, subject, text, html);
 }
 
-export { sendRegistrationEmail, sendLoginEmail };
+export { sendRegistrationEmail, sendLoginEmail, verifyEmailService, sendEmail };
