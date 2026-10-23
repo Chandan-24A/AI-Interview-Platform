@@ -1,9 +1,7 @@
-import dns from "node:dns";
+import dns from "node:dns/promises";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
 
-// Render containers do not have outbound IPv6 routing; force IPv4 resolution
-dns.setDefaultResultOrder("ipv4first");
 dotenv.config();
 
 function getCredentials() {
@@ -14,16 +12,31 @@ function getCredentials() {
     return { user, pass };
 }
 
-function createTransporter() {
+// Explicitly resolve smtp.gmail.com to IPv4 to eliminate Render ENETUNREACH IPv6 errors
+async function getSmtpHost() {
+    try {
+        const { address } = await dns.lookup("smtp.gmail.com", { family: 4 });
+        return address || "smtp.gmail.com";
+    } catch (e) {
+        return "smtp.gmail.com";
+    }
+}
+
+async function createTransporter() {
     const { user, pass } = getCredentials();
     if (!user || !pass) {
         return null;
     }
+
+    const host = await getSmtpHost();
+
     return nodemailer.createTransport({
-        host: "smtp.gmail.com",
+        host,
         port: 465,
-        secure: true, // Port 465 SSL for cloud containers (Render)
-        family: 4,    // Force IPv4 to prevent ENETUNREACH on Render/Docker
+        secure: true, // SSL on port 465
+        tls: {
+            servername: "smtp.gmail.com", // Verify certificate against domain
+        },
         auth: { user, pass },
         connectionTimeout: 10000,
     });
@@ -41,8 +54,15 @@ async function verifyEmailService() {
         };
     }
 
-    const transporter = createTransporter();
     try {
+        const transporter = await createTransporter();
+        if (!transporter) {
+            return {
+                status: "disabled",
+                message: "Transporter could not be initialized.",
+            };
+        }
+
         await transporter.verify();
         return {
             status: "ready",
@@ -76,8 +96,12 @@ const sendEmail = async (to, subject, text, html) => {
         return { success: false, reason: "credentials_missing" };
     }
 
-    const transporter = createTransporter();
     try {
+        const transporter = await createTransporter();
+        if (!transporter) {
+            return { success: false, reason: "transporter_failed" };
+        }
+
         const info = await transporter.sendMail({
             from: `"AI Interview Platform" <${user}>`,
             to,
