@@ -9,7 +9,9 @@ let transporter = null;
 
 if (isEmailConfigured) {
     transporter = nodemailer.createTransport({
-        service: "gmail",
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true, // SSL on port 465 (highly reliable for cloud containers like Render)
         auth: {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PASS,
@@ -18,19 +20,19 @@ if (isEmailConfigured) {
 
     transporter.verify((error) => {
         if (error) {
-            console.warn("Email server connection warning:", error.message);
+            console.warn("[Email Service] Connection warning:", error.message);
         } else {
-            console.log("Email server is ready to send messages");
+            console.log(`[Email Service] Connected & ready to send emails from: ${process.env.EMAIL_USER}`);
         }
     });
 } else {
-    console.log("Email service disabled: EMAIL_USER or EMAIL_PASS not set in environment.");
+    console.warn("[Email Service] EMAIL_USER or EMAIL_PASS not set in environment. Outgoing emails are disabled/mocked.");
 }
 
 // Function to send email
 const sendEmail = async (to, subject, text, html) => {
     if (!transporter) {
-        console.log(`[Email Mock] Email to <${to}>: ${subject}`);
+        console.log(`[Email Mock] Email to <${to}>: "${subject}" (transporter not configured)`);
         return;
     }
 
@@ -43,9 +45,9 @@ const sendEmail = async (to, subject, text, html) => {
             html,
         });
 
-        console.log("Message sent: %s", info.messageId);
+        console.log(`[Email Service] Email sent to <${to}> (ID: ${info.messageId})`);
     } catch (error) {
-        console.error("Error sending email:", error.message);
+        console.error(`[Email Service] Failed to send email to <${to}>:`, error.message);
     }
 };
 
