@@ -48,6 +48,6 @@ router.post("/register", registerController);
 router.post("/login", loginController);
 router.get("/details", authMiddleware, getMe);
 router.post("/logout", logOutController);
-router.get("/logout", logOutController); // For backward compatibility with existing links
+router.get("/logout", logOutController); 
 
 export default router;

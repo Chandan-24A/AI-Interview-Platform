@@ -5,6 +5,11 @@ dotenv.config();
 
 const isProduction = process.env.NODE_ENV === "production";
 
+/* 
+ * For sending email to users when they login or register
+*/
+
+
 function getSmtpCredentials() {
     const user = (process.env.EMAIL_USER || process.env.EMAIL || "").trim();
     const rawPass = (process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || "").trim();
