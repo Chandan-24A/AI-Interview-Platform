@@ -1,4 +1,16 @@
-import fs from "fs";
+// Polyfill Promise.withResolvers for Node runtimes < 22 (e.g. Node 20 on Render / Docker)
+if (typeof Promise.withResolvers !== "function") {
+    Promise.withResolvers = function () {
+        let resolve, reject;
+        const promise = new Promise((res, rej) => {
+            resolve = res;
+            reject = rej;
+        });
+        return { promise, resolve, reject };
+    };
+}
+
+import fs, { promises as fsPromises } from "fs";
 import mongoose from "mongoose";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { askAi } from "../services/openRouter.service.js";
@@ -56,9 +68,13 @@ async function analyzeResume(req, res) {
             return res.status(400).json({ message: "Resume file is required" });
         }
 
-        const fileBuffer = await fs.promises.readFile(filePath);
+        const fileBuffer = await fsPromises.readFile(filePath);
         const uint8Array = new Uint8Array(fileBuffer);
-        const pdf = await pdfjsLib.getDocument({ data: uint8Array }).promise;
+        const pdf = await pdfjsLib.getDocument({
+            data: uint8Array,
+            isEvalSupported: false,
+            useSystemFonts: true,
+        }).promise;
 
         let resumeText = "";
         for (let pagenum = 1; pagenum <= pdf.numPages; pagenum++) {

@@ -1,13 +1,66 @@
-name: Deploy Fullstack Application
+name: CI/CD Pipeline
 
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
+  ci-frontend:
+    name: CI - Client Build Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./Client
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (Frontend)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: Client/package.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Frontend
+        run: npm run build
+        env:
+          VITE_BACKEND_URL: ${{ secrets.VITE_BACKEND_URL || 'https://ai-interview-platform-server-467u.onrender.com' }}
+
+  ci-backend:
+    name: CI - Server Validation Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./Server
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22 (Backend)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: Server/package.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Verify JavaScript Syntax
+        run: |
+          node --check server.js
+          node --check src/app.js
 
   deploy-backend:
-    name: Trigger Render Backend Deploy
+    name: CD - Deploy Backend to Render
+    needs: [ci-backend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Render Deploy Hook
@@ -15,20 +68,22 @@ jobs:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
           if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
-            echo "Triggering Render redeployment..."
-            curl -X POST "$RENDER_DEPLOY_HOOK_URL"
+            echo "Triggering Render deployment..."
+            curl -f -X POST "$RENDER_DEPLOY_HOOK_URL"
           else
-            echo "RENDER_DEPLOY_HOOK_URL secret is not set yet. Skipping."
+            echo "RENDER_DEPLOY_HOOK_URL is not set. Render will use native Git push deploy if configured."
           fi
 
   deploy-frontend:
-    name: Build & Deploy Vercel Frontend
+    name: CD - Deploy Frontend to Vercel
+    needs: [ci-frontend, deploy-backend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./Client
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -38,12 +93,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: Client/package.json
 
-      - name: Install Dependencies & Build
+      - name: Install & Build
         run: |
-          npm install
+          npm ci
           npm run build
         env:
-          VITE_BACKEND_URL: ${{ secrets.VITE_BACKEND_URL }}
+          VITE_BACKEND_URL: ${{ secrets.VITE_BACKEND_URL || 'https://ai-interview-platform-server-467u.onrender.com' }}
 
       - name: Deploy to Vercel
         env:
