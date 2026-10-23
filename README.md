@@ -64,7 +64,7 @@ InterView-Prep-Ai/
 │   │   │   ├── auth.routes.js      # Authentication API endpoints
 │   │   │   └── interview.routes.js # Resume, ATS, and interview session endpoints
 │   │   ├── services/
-│   │   │   ├── email.service.js    # Nodemailer transactional emails
+│   │   │   ├── email.service.js    # Resend & Nodemailer transactional emails
 │   │   │   └── openRouter.service.js# OpenRouter AI gateway & fallback handler
 │   │   └── app.js                  # Express app setup & dynamic CORS configuration
 │   ├── Dockerfile                  # Node 22 Alpine backend container
@@ -166,7 +166,7 @@ flowchart TD
     subgraph ExternalServices ["External Cloud Services"]
         MongoDB[("MongoDB Atlas Database")]
         LLM["OpenRouter LLMs (Gemini / Llama)"]
-        Email["SMTP Email Service"]
+        Email["Resend / Email Service"]
     end
 
     User <--> UI
@@ -225,9 +225,13 @@ cd InterView-Prep-Ai
    OPENROUTER_API_KEY=your_openrouter_api_key
    OPENROUTER_MODEL=google/gemini-2.0-flash-exp:free
 
-   # Optional: Email notifications
-   EMAIL_USER=your_email@gmail.com
-   EMAIL_PASS=your_email_app_password
+   # Email notifications (Resend recommended for cloud deployments)
+   RESEND_API_KEY=re_your_resend_api_key
+   # RESEND_FROM=AI Interview Platform <onboarding@resend.dev>
+
+   # Alternative: Nodemailer (SMTP - local dev)
+   # EMAIL_USER=your_email@gmail.com
+   # EMAIL_PASS=your_email_app_password
    ```
 5. Start the development server:
    ```bash

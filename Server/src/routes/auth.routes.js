@@ -9,23 +9,31 @@ import { verifyEmailService, sendEmail } from "../services/email.service.js";
 
 const router = express.Router();
 
-// Diagnostic endpoint to test Nodemailer configuration in production
+// Diagnostic endpoint to test email configuration in production
 router.get("/test-email", async (req, res) => {
     const diagnostic = await verifyEmailService();
     if (diagnostic.status !== "ready") {
         return res.status(500).json({
             success: false,
             diagnostic,
-            help: "Make sure EMAIL_USER is your Gmail and EMAIL_PASS is a 16-character Google App Password (without spaces) in Render Environment.",
+            help: "Add RESEND_API_KEY to Render Environment, or set EMAIL_USER and EMAIL_PASS.",
         });
     }
 
     const targetEmail = req.query.to || diagnostic.user;
+    if (!targetEmail) {
+        return res.status(400).json({
+            success: false,
+            diagnostic,
+            help: "Please provide a target email using query param: /api/auth/test-email?to=your_email@example.com",
+        });
+    }
+
     const sendResult = await sendEmail(
         targetEmail,
         "Test Email from AI Interview Platform 🚀",
-        "If you see this, your Nodemailer email service is working in production!",
-        "<div style='font-family: Arial; padding: 20px;'><h2>AI Interview Platform</h2><p>Your Nodemailer email service is working in production! 🎉</p></div>"
+        "If you see this, your email service is working in production!",
+        "<div style='font-family: Arial; padding: 20px;'><h2>AI Interview Platform</h2><p>Your email service is working in production! 🎉</p></div>"
     );
 
     return res.status(sendResult.success ? 200 : 500).json({
