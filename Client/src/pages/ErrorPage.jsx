@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -9,6 +10,7 @@ import {
   FaRedo,
   FaHome,
   FaSignInAlt,
+  FaSpinner,
 } from "react-icons/fa";
 
 const errorConfigs = {
@@ -81,6 +83,8 @@ const errorConfigs = {
 const ErrorPage = ({ type: propType, error, onRetry }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isWakingUp, setIsWakingUp] = useState(false);
+  const [pingAttempts, setPingAttempts] = useState(0);
 
   // Determine error type from prop, state, or path
   let activeType = propType || location.state?.type;
@@ -93,6 +97,40 @@ const ErrorPage = ({ type: propType, error, onRetry }) => {
       activeType = "something-went-wrong";
     else activeType = "not-found";
   }
+
+  // Automatic health-check poller for Render free tier wakeups
+  useEffect(() => {
+    if (activeType !== "server-unavailable") return;
+
+    setIsWakingUp(true);
+    const backendUrl =
+      import.meta.env.VITE_BACKEND_URL ||
+      "https://ai-interview-platform-server-467u.onrender.com";
+
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        setPingAttempts((prev) => prev + 1);
+        const res = await fetch(`${backendUrl}/health`, { method: "GET" });
+        if (res.ok && isMounted) {
+          clearInterval(interval);
+          // Server is back online! Auto-reload or retry
+          if (onRetry) {
+            onRetry();
+          } else {
+            navigate(-1);
+          }
+        }
+      } catch {
+        // Still warming up, ignore error and continue polling
+      }
+    }, 4000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [activeType, onRetry, navigate]);
 
   const config = errorConfigs[activeType] || errorConfigs["something-went-wrong"];
   const IconComponent = config.icon;
@@ -153,6 +191,17 @@ const ErrorPage = ({ type: propType, error, onRetry }) => {
         <p className="text-xs sm:text-sm text-gray-500 leading-relaxed max-w-md mx-auto mb-6">
           {location.state?.message || error?.message || config.description}
         </p>
+
+        {/* Live Server Awakening Status Indicator for Render Free Tier */}
+        {activeType === "server-unavailable" && isWakingUp && (
+          <div className="mb-6 p-3.5 bg-rose-50 border border-rose-200/60 rounded-xl flex items-center justify-center gap-2.5 text-xs text-rose-700 font-medium animate-pulse">
+            <FaSpinner className="animate-spin text-rose-600" size={14} />
+            <span>
+              Waking up Render backend... Auto-connecting in progress
+              {pingAttempts > 0 ? ` (${pingAttempts * 4}s)` : ""}
+            </span>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">

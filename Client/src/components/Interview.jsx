@@ -697,6 +697,7 @@ const Interview = ({ interviewData, onFinish, onAbort }) => {
                 src={videoSource}
                 key={videoSource}
                 ref={videoRef}
+                loop
                 muted
                 playsInline
                 preload="auto"
